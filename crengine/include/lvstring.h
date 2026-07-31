@@ -418,7 +418,11 @@ public:
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     basic_lstring& operator=(const lChar8* other) noexcept
     {
-        //TODO
+        if (!other) {
+            base::clear();
+            return *this;
+        }
+        appendString(*this, std::string(other));
         return *this;
     }
 
@@ -753,13 +757,15 @@ public:
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     basic_lstring& append(const lChar8 * str)
     {
-        //TODO
+        if (str)
+            appendString(*this, std::string(str));
         return *this;
     }
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     basic_lstring& append(const lChar8 * str, size_type count)
     {
-        //TODO
+        if (str && count > 0)
+            appendString(*this, std::string(str, count));
         return *this;
     }
     /// returns true if string starts with specified substring (8bit ASCII only)
