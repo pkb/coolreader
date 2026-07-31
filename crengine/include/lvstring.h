@@ -676,51 +676,59 @@ public:
     /// find position of char inside string, -1 if not found
     int pos(CharT ch, int start = 0) const
     {
-        //TODO
-        return -1;
+        size_t res = base::find(ch, static_cast<size_t>(start));
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     /// find position of substring inside string, -1 if not found
     int pos(const basic_lstring& subStr, int start = 0) const
     {
-        //TODO
-        return -1;
+        size_t res = base::find(subStr, static_cast<size_t>(start));
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     int pos(basic_lstring& subStr, int start = 0) const
     {
-        //TODO
-        return -1;
+        size_t res = base::find(subStr, static_cast<size_t>(start));
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     int pos(const CharT* subStr, int startPos = 0) const
     {
-        //TODO
-        return -1;
+        if (!subStr)
+            return -1;
+        size_t res = base::find(subStr, static_cast<size_t>(startPos));
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     int pos(const lChar8* subStr, int startPos = 0) const
     {
-        //TODO
-        return -1;
+        if (!subStr)
+            return -1;
+        basic_lstring converted(subStr); // Construct temp matching encoding
+        return pos(converted, startPos);
     }
-    int rpos(CharT ch)
+    int rpos(CharT ch) const
     {
-        //TODO
-        return -1;
+        size_t res = base::rfind(ch);
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
-    int rpos(CharT* substr)
+    int rpos(CharT* substr) const
     {
-        //TODO
-        return -1;
+        if (!substr)
+            return -1;
+        size_t res = base::rfind(substr);
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    int rpos(const lChar8* substr)
+    int rpos(const lChar8* substr) const
     {
-        //TODO
-        return -1;
+        if (!substr)
+            return -1;
+        basic_lstring converted(substr);
+        return rpos(converted.c_str());
     }
-    int rpos(const basic_lstring& substr)
+    int rpos(const basic_lstring& substr) const
     {
-        //TODO
-        return -1;
+        size_t res = base::rfind(substr);
+        return (res == base::npos) ? -1 : static_cast<int>(res);
     }
 
         /// returns true if string starts with specified substring
