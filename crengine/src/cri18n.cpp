@@ -191,7 +191,7 @@ bool CRMoFileTranslator::openMoFile( lString32 fileName )
 		if ( len ) {
 			if ( stream->SetPos( offset )!=offset )
 				return false;
-			s.append( len, ' ' );
+			s.reserve(len);
 			if ( stream->Read( s.modify(), len, &bytesRead )!=LVERR_OK || bytesRead!=len )
 				return false;
 		}
@@ -206,7 +206,7 @@ bool CRMoFileTranslator::openMoFile( lString32 fileName )
 		if ( len ) {
 			if ( stream->SetPos( offset )!=offset )
 				return false;
-			s.append( len, ' ' );
+			s.reserve(len);
 			if ( stream->Read( s.modify(), len, &bytesRead )!=LVERR_OK || bytesRead!=len )
 				return false;
 		}

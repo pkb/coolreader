@@ -76,7 +76,7 @@ static void replaceColor( char * str, lUInt32 color )
     // in line like "0 c #80000000",
     // replace value of color
     for ( int i=0; i<8; i++ ) {
-        str[i+5] = toHexDigit((color>>28) & 0xF);
+        str[i+5] = toHexDigit<char>((color>>28) & 0xF);
         color <<= 4;
     }
 }
