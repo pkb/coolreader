@@ -4,8 +4,6 @@ option(BUILD_TOOLS "Build tools" OFF)
 SET (CRENGINE_SOURCES
     src/cp_stats.cpp
     src/lvstring.cpp
-    src/lvstring8collection.cpp
-    src/lvstring32collection.cpp
     src/lvstring32hashedcollection.cpp
     src/serialbuf.cpp
     src/crlog.cpp
