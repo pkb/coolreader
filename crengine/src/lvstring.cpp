@@ -70,55 +70,6 @@ extern "C" {
 ////////////////////////////////////////////////////////////////////////////
 // Utility functions
 ////////////////////////////////////////////////////////////////////////////
-
-inline int _lStr_len(const lChar16 * str)
-{
-    int len;
-    for (len=0; *str; str++)
-        len++;
-    return len;
-}
-
-inline int _lStr_len(const lChar32 * str)
-{
-    int len;
-    for (len=0; *str; str++)
-        len++;
-    return len;
-}
-
-inline int _lStr_len(const lChar8 * str)
-{
-    int len;
-    for (len=0; *str; str++)
-        len++;
-    return len;
-}
-
-inline int _lStr_nlen(const lChar16 * str, int maxcount)
-{
-    int len;
-    for (len=0; len<maxcount && *str; str++)
-        len++;
-    return len;
-}
-
-inline int _lStr_nlen(const lChar32 * str, int maxcount)
-{
-    int len;
-    for (len=0; len<maxcount && *str; str++)
-        len++;
-    return len;
-}
-
-inline int _lStr_nlen(const lChar8 * str, int maxcount)
-{
-    int len;
-    for (len=0; len<maxcount && *str; str++)
-        len++;
-    return len;
-}
-
 inline int _lStr_cpy(lChar16 * dst, const lChar16 * src)
 {
     int count;
@@ -277,36 +228,6 @@ inline void _lStr_memset(lChar32 * dst, lChar32 value, int count)
 inline void _lStr_memset(lChar8 * dst, lChar8 value, int count)
 {
     memset(dst, (lChar8) value, count);
-}
-
-int lStr_len(const lChar16 * str)
-{
-    return _lStr_len(str);
-}
-
-int lStr_len(const lChar32 * str)
-{
-    return _lStr_len(str);
-}
-
-int lStr_len(const lChar8 * str)
-{
-    return _lStr_len(str);
-}
-
-int lStr_nlen(const lChar16 * str, int maxcount)
-{
-    return _lStr_nlen(str, maxcount);
-}
-
-int lStr_nlen(const lChar32 * str, int maxcount)
-{
-    return _lStr_nlen(str, maxcount);
-}
-
-int lStr_nlen(const lChar8 * str, int maxcount)
-{
-    return _lStr_nlen(str, maxcount);
 }
 
 int lStr_cpy(lChar16 * dst, const lChar16 * src)

@@ -40,6 +40,7 @@
 #endif
 
 #include <string>
+#include <string_view>
 #include <cstring>
 #include <charconv>
 #include <type_traits>
@@ -86,19 +87,6 @@
 #define UNICODE_ASCII_FULL_WIDTH_END 0xFF5E
 #define UNICODE_ASCII_FULL_WIDTH_OFFSET 0xFEE0 // substract or add to convert to/from ASCII
 
-
-/// strlen for lChar16
-int lStr_len(const lChar16 * str);
-/// strlen for lChar32
-int lStr_len(const lChar32 * str);
-/// strlen for lChar8
-int lStr_len(const lChar8 * str);
-/// strnlen for lChar16
-int lStr_nlen(const lChar16 * str, int maxcount);
-/// strnlen for lChar32
-int lStr_nlen(const lChar32 * str, int maxcount);
-/// strnlen for lChar8
-int lStr_nlen(const lChar8 * str, int maxcount);
 /// strcpy for lChar16
 int lStr_cpy(lChar16 * dst, const lChar16 * src);
 /// strcpy for lChar32
@@ -194,6 +182,12 @@ void lStr_findWordBounds( const lChar32 * str, int sz, int pos, int & start, int
 // is char a word separator
 bool lStr_isWordSeparator( lChar32 ch );
 
+template<typename CharT>
+std::size_t lStr_len(const CharT* start)
+{
+    return start ? std::char_traits<CharT>::length(start) : 0;
+}
+
 namespace detail {
     std::basic_string<lChar16> Utf8ToUtf16(const lChar8* str, size_t len);
     std::basic_string<lChar32> Utf8ToUtf32(const lChar8* str, size_t len);
@@ -214,7 +208,7 @@ namespace fmt {
     class hex {
         lUInt64 value;
     public:
-        explicit hex(lInt64 v) : value(v) { }
+        explicit hex(lUInt64 v) : value(v) { }
         lUInt64 get() const { return value; }
     };
 }
@@ -231,7 +225,7 @@ constexpr CharT toHexDigit(int digit) noexcept
 }
 
 template <typename StringT, typename NumT>
-inline bool StringToNum(const StringT& s, NumT& n) noexcept
+inline bool StringToNum(const StringT& s, NumT& n)
 {
     std::string str;
     using CharT = typename StringT::value_type;
@@ -270,7 +264,8 @@ inline bool StringToNum(const StringT& s, NumT& n) noexcept
         static_assert(std::is_arithmetic_v<NumT>, "Unsupported type passed to StringToNum.");
     }
 
-    if (result.ec != std::errc() || result.ptr == p) return false;
+    if (result.ec != std::errc() || result.ptr == p)
+        return false;
 
     //FIXME: original code did not check for trailing whitespaces properly
     const char* trailing = result.ptr;
@@ -335,7 +330,7 @@ void appendDecimal(StringT& str, lInt64 val)
 }
 
 template <typename StringT>
-void appendHex(StringT& str, lInt64 val)
+void appendHex(StringT& str, lUInt64 val)
 {
     appendString(str, NumToString(val, true));
 }
@@ -422,7 +417,17 @@ public:
             base::clear();
             return *this;
         }
-        appendString(*this, std::string(other));
+        size_t length = lStr_len(other);
+
+        if constexpr (std::is_same_v<CharT, lChar16>) {
+            auto converted = detail::Utf8ToUtf16(other, length);
+            base::assign(converted.data(), converted.size());
+        }
+        else if constexpr (std::is_same_v<CharT, lChar32>) {
+            auto converted = detail::Utf8ToUtf32(other, length);
+            base::assign(converted.data(), converted.size());
+        }
+
         return *this;
     }
 
