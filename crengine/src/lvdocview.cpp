@@ -1263,8 +1263,8 @@ bool LVDocView::exportWolFile(LVStream * stream, bool flgGray, int levels) {
 	//ldomXPointer bm = getBookmark();
 	{
 		WOLWriter wol(stream);
-		lString8 authors = UnicodeTo8Bit(getAuthors(), table);
-		lString8 name = UnicodeTo8Bit(getTitle(), table);
+		lByteString authors = UnicodeTo8Bit(getAuthors(), table);
+		lByteString name = UnicodeTo8Bit(getTitle(), table);
         wol.addTitle(name, cs8("-"), authors, cs8("-"), //adapter
                 cs8("-"), //translator
                 cs8("-"), //publisher
@@ -1318,7 +1318,7 @@ bool LVDocView::exportWolFile(LVStream * stream, bool flgGray, int levels) {
 						section_id, l1);
 				if (!l1section)
 					break;
-				lString8 title = UnicodeTo8Bit(getSectionHeader(l1section),
+				lByteString title = UnicodeTo8Bit(getSectionHeader(l1section),
 						table);
 				int page = getSectionPage(l1section, pages);
 				if (!showCover)
@@ -1333,7 +1333,7 @@ bool LVDocView::exportWolFile(LVStream * stream, bool flgGray, int levels) {
 								LXML_NS_ANY, section_id, l2);
 						if (!l2section)
 							break;
-						lString8 title = UnicodeTo8Bit(getSectionHeader(
+						lByteString title = UnicodeTo8Bit(getSectionHeader(
 								l2section), table);
 						int page = getSectionPage(l2section, pages);
 						if (!title.empty() && page >= 0) {
@@ -1347,7 +1347,7 @@ bool LVDocView::exportWolFile(LVStream * stream, bool flgGray, int levels) {
 												LXML_NS_ANY, section_id, l3);
 								if (!l3section)
 									break;
-								lString8 title = UnicodeTo8Bit(
+								lByteString title = UnicodeTo8Bit(
 										getSectionHeader(l3section), table);
 								int page = getSectionPage(l3section, pages);
 								if (!title.empty() && page >= 0) {

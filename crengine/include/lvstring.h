@@ -786,60 +786,63 @@ public:
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     bool startsWith (const lChar8 * substring) const
     {
-        //TODO
-        return false;
+        return startsWith(basic_lstring(substring));
     }
     /// returns true if string ends with specified substring
     bool endsWith(const basic_lstring& substring) const
     {
-        //TODO
-        return false;
+        return base::size() >= substring.size() &&
+            base::compare(base::size() - substring.size(), substring.size(), substring) == 0;
     }
     /// returns true if string ends with specified substring (8-bit ASCII only)
     bool endsWith(const CharT* substring) const
     {
-        //TODO
-        return false;
+        return endsWith(basic_lstring(substring));
     }
     /// returns true if string ends with specified substring (8-bit ASCII only)
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     bool endsWith(const lChar8* substring) const
     {
-        //TODO
-        return false;
+        return endsWith(basic_lstring(substring));
     }
     /// returns true if string starts with specified substring, case insensitive
     bool startsWithNoCase(const basic_lstring& substring) const
     {
-        //TODO
-        return false;
+        if (substring.size() > base::size())
+            return false;
+        basic_lstring prefix = substr(0, substring.size()).uppercase();
+        basic_lstring upperSub = substring;
+        upperSub.uppercase();
+        return prefix == upperSub;
     }
     /// returns last character
     CharT lastChar() { return base::empty() ? 0 : base::at(base::length()-1); }
     /// returns first character
     CharT firstChar() { return base::empty() ? 0 : base::at(0); }
-
+    // We don't use COW so just return data() which is writable
     CharT* modify() { return base::data(); }
     basic_lstring& pack() { return *this; }
     /// clear string, set buffer size
     void  reset( size_type size )
     {
-        //TODO
+        base::clear();
+        base::shrink_to_fit();
+        base::resize(size);
     }
     /// erase all extra characters from end of string after size
-    void  limit( size_type size )
+    void limit( size_type size )
     {
-        //TODO
+        if (size < base::size()) {
+            base::erase(size);
+        }
     }
 
-    //static const basic_lstring<CharT> empty_str;
     static inline const basic_lstring<CharT> empty_str{};
 };
 
-//template <typename CharT>
-//static inline const basic_lstring<CharT> empty_str{};
 
 using lString8  = basic_lstring<lChar8>;
+using lByteString = std::string;
 using lString16 = basic_lstring<lChar16>;
 using lString32 = basic_lstring<lChar32>;
 
@@ -978,7 +981,7 @@ lUInt32 calcStringHash( const lChar32 * s );
 
 lString8  UnicodeToTranslit( const lString32 & str );
 /// converts wide unicode string to local 8-bit encoding
-lString8  UnicodeToLocal( const lString32 & str );
+lByteString UnicodeToLocal( const lString32 & str );
 /// converts wide unicode string to utf-8 string
 inline lString8  UnicodeToUtf8( const lString32 & str ) { return lString8(str.c_str()); }
 /// converts wide unicode string to utf-16 string
@@ -992,11 +995,11 @@ lString8  UnicodeToWtf8( const lString32 & str );
 /// converts wide unicode string to wtf-8 string
 lString8 UnicodeToWtf8(const lChar32 * s, int count);
 /// converts unicode string to 8-bit string using specified conversion table
-lString8  UnicodeTo8Bit( const lString32 & str, const lChar8 * * table );
+lByteString UnicodeTo8Bit( const lString32 & str, const lChar8 * * table );
 /// converts 8-bit string to unicode string using specified conversion table for upper 128 characters
-lString32 ByteToUnicode( const lString8 & str, const lChar32 * table );
+lString32 ByteToUnicode( std::string_view str, const lChar32 * table );
 /// converts 8-bit string in local encoding to wide unicode string
-lString32 LocalToUnicode( const lString8 & str );
+lString32 LocalToUnicode( std::string_view str );
 /// converts utf-8 string to wide unicode string
 inline lString32 Utf8ToUnicode( const lString8 & str ) { return lString32(str.c_str()); }
 /// converts utf-8 c-string to wide unicode string

@@ -174,14 +174,14 @@ LVDirectoryContainer *LVDirectoryContainer::OpenDirectory(const char32_t *path, 
                 } else {
                     // normal directory
                     LVDirectoryContainerItemInfo * item = new LVDirectoryContainerItemInfo;
-                    item->m_name = LocalToUnicode( lString8( pfn ) );
+                    item->m_name = LocalToUnicode(pfn);
                     item->m_is_container = true;
                     dir->Add(item);
                 }
             } else {
                 // file
                 LVDirectoryContainerItemInfo * item = new LVDirectoryContainerItemInfo;
-                item->m_name = LocalToUnicode( lString8( pfn ) );
+                item->m_name = LocalToUnicode(pfn);
                 item->m_size = data.nFileSizeLow;
                 item->m_flags = data.dwFileAttributes;
                 dir->Add(item);
@@ -200,7 +200,7 @@ LVDirectoryContainer *LVDirectoryContainer::OpenDirectory(const char32_t *path, 
     // POSIX
     lString32 p( fn );
     p.erase( p.length()-1, 1 );
-    lString8 p8 = UnicodeToLocal( p );
+    lByteString p8 = UnicodeToLocal( p );
     if ( p8.empty() )
         p8 = ".";
     const char * p8s = p8.c_str();
@@ -208,7 +208,7 @@ LVDirectoryContainer *LVDirectoryContainer::OpenDirectory(const char32_t *path, 
     if ( d ) {
         struct dirent * pde;
         while ( (pde = readdir(d))!=NULL ) {
-            lString8 fpath = p8 + "/" + pde->d_name;
+            lByteString fpath = p8 + "/" + pde->d_name;
             struct stat st;
             stat( fpath.c_str(), &st );
             if ( S_ISDIR(st.st_mode) ) {
@@ -216,14 +216,14 @@ LVDirectoryContainer *LVDirectoryContainer::OpenDirectory(const char32_t *path, 
                 if ( strcmp(pde->d_name, ".") && strcmp(pde->d_name, "..") ) {
                     // normal directory
                     LVDirectoryContainerItemInfo * item = new LVDirectoryContainerItemInfo;
-                    item->m_name = LocalToUnicode(lString8(pde->d_name));
+                    item->m_name = LocalToUnicode(pde->d_name);
                     item->m_is_container = true;
                     dir->Add(item);
                 }
             } else if ( S_ISREG(st.st_mode) ) {
                 // file
                 LVDirectoryContainerItemInfo * item = new LVDirectoryContainerItemInfo;
-                item->m_name = LocalToUnicode(lString8(pde->d_name));
+                item->m_name = LocalToUnicode(pde->d_name);
                 item->m_size = st.st_size;
                 item->m_flags = st.st_mode;
                 dir->Add(item);

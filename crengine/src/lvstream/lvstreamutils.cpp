@@ -720,8 +720,8 @@ bool LVDeleteFile( lString32 filename )
 
 /// rename file
 bool LVRenameFile(lString32 oldname, lString32 newname) {
-    lString8 oldname8 = UnicodeToLocal(oldname);
-    lString8 newname8 = UnicodeToLocal(newname);
+    lByteString oldname8 = UnicodeToLocal(oldname);
+    lByteString newname8 = UnicodeToLocal(newname);
 #ifdef _WIN32
     lString16 oldname16 = UnicodeToUtf16(oldname);
     lString16 newname16 = UnicodeToUtf16(newname);
@@ -738,7 +738,7 @@ bool LVRenameFile(lString32 oldname, lString32 newname) {
 }
 
 /// rename file
-bool LVRenameFile(lString8 oldname, lString8 newname) {
+bool LVRenameFile(lByteString oldname, lByteString newname) {
 #ifdef _WIN32
     return LVRenameFile(LocalToUnicode(oldname), LocalToUnicode(newname));
 #else

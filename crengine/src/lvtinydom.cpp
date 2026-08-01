@@ -18959,7 +18959,7 @@ void ldomDocument::registerEmbeddedFonts()
                 do { (url.replace(lString32(" "), lString32("\0"))); }
                 while (url.pos(lString32(" ")) != -1);
                  if (fontface.lowercase().pos(url.lowercase()) != -1) {
-                    if(fontMan->SetAlias(face, UnicodeToLocal(flist[j]), getDocIndex(),item->getBold(),item->getItalic())){
+                    if(fontMan->SetAlias(face, UnicodeToUtf8(flist[j]), getDocIndex(),item->getBold(),item->getItalic())){
                     x.append(face).append(lString8(","));
                         CRLog::debug("font-face %s matches local font %s",face.c_str(),LCSTR(flist[j]));
                     break;}

@@ -344,7 +344,7 @@ int LVZipArc::ReadContents() {
                 const lChar32 *enc_name = (ZipHeader.PackOS == 0) ? U"cp866" : U"cp1251";
                 //CRLog::trace("detected encoding %s", LCSTR(enc_name));
                 const lChar32 *table = GetCharsetByte2UnicodeTable(enc_name);
-                fName = ByteToUnicode(lString8(fnbuf), table);
+                fName = ByteToUnicode(fnbuf, table);
             }
         }
 

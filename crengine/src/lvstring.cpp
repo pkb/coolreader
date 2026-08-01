@@ -1416,9 +1416,9 @@ lString8 UnicodeToWtf8( const lString32 & str )
     return UnicodeToWtf8(str.c_str(), str.length());
 }
 
-lString8 UnicodeTo8Bit( const lString32 & str, const lChar8 * * table )
+lByteString UnicodeTo8Bit( const lString32 & str, const lChar8 * * table )
 {
-    lString8 buf;
+    lByteString buf;
     buf.reserve( str.length() );
     for (int i=0; i < str.length(); i++) {
         lChar32 ch = str[i];
@@ -1432,7 +1432,7 @@ lString8 UnicodeTo8Bit( const lString32 & str, const lChar8 * * table )
     return buf;
 }
 
-lString32 ByteToUnicode( const lString8 & str, const lChar32 * table )
+lString32 ByteToUnicode( std::string_view str, const lChar32 * table )
 {
     lString32 buf;
     buf.reserve( str.length() );
@@ -1447,11 +1447,11 @@ lString32 ByteToUnicode( const lString8 & str, const lChar32 * table )
 
 #if !defined(__SYMBIAN32__) && defined(_WIN32)
 
-lString8 UnicodeToLocal( const lString32 & str )
+lByteString UnicodeToLocal( const lString32 & str )
 {
    if (str.empty())
       return {};
-   lString16 utf16 = UnicodeToUtf16(str);
+   lString16 utf16 = lString16(str);
    CHAR def_char = '?';
    BOOL usedDefChar = FALSE;
    int len = WideCharToMultiByte(
@@ -1467,7 +1467,7 @@ lString8 UnicodeToLocal( const lString32 & str )
       );
    if (len)
    {
-      lString8 dst(len, 0);
+      lByteString dst(len, 0);
       WideCharToMultiByte(
          CP_ACP,
          WC_COMPOSITECHECK | WC_DISCARDNS
@@ -1479,14 +1479,15 @@ lString8 UnicodeToLocal( const lString32 & str )
          &def_char,
          &usedDefChar
          );
+      return dst;
    }
    return {};
 }
 
-lString32 LocalToUnicode( const lString8 & str )
+lString32 LocalToUnicode( std::string_view str )
 {
    if (str.empty())
-      return lString32::empty_str;
+      return {};
    int len = MultiByteToWideChar(
       CP_ACP,
       0,
@@ -1506,20 +1507,21 @@ lString32 LocalToUnicode( const lString8 & str )
          utf16.data(),
          len
          );
+      return lString32(utf16);
    }
    return {};
 }
 
 #else
 
-lString8 UnicodeToLocal( const lString32 & str )
+lByteString UnicodeToLocal( const lString32 & str )
 {
-    return UnicodeToUtf8( str );
+    return detail::Utf32ToUtf8(str.data(), str.size());
 }
 
-lString32 LocalToUnicode( const lString8 & str )
+lString32 LocalToUnicode( std::string_view str )
 {
-    return Utf8ToUnicode( str );
+    return lString32(str.data(), str.size());
 }
 
 #endif

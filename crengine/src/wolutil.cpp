@@ -673,9 +673,9 @@ void WOLWriter::writeToc()
             item->ParentOffs = cnv.lsf( src->parent ? src->parent->catindex * 80 + _subcatalog_offset + 12 : 0 );
             item->NextPeerOffs = cnv.lsf( src->nextSibling ? src->nextSibling->catindex * 80 + _subcatalog_offset + 12 : 0 );
             item->PrevPeerOffs = cnv.lsf( src->prevSibling ? src->prevSibling->catindex * 80 + _subcatalog_offset + 12 : 0 );
-            lString8 name = src->name;
+            lByteString name = src->name;
             item->NameOffs = cnv.lsf( (lUInt32)(names_start + names.length()) );
-            name << ' ';
+            name += ' ';
             item->NameSize = cnv.lsf( (lUInt16)(name.length()) );
             lStr_ncpy( item->ItemName, name.c_str(), 47 );
             item->PageOffs = cnv.lsf( getPageOffset(src->page) ); // ???
@@ -732,15 +732,15 @@ void WOLWriter::updateHeader()
 }
 
 void WOLWriter::addTitle(
-          const lString8 & title,
-          const lString8 & subject,
-          const lString8 & author,
-          const lString8 & adapter,
-          const lString8 & translator,
-          const lString8 & publisher,
-          const lString8 & time_publish,
-          const lString8 & introduction,
-          const lString8 & isbn)
+          const lByteString & title,
+          const lByteString & subject,
+          const lByteString & author,
+          const lByteString & adapter,
+          const lByteString & translator,
+          const lByteString & publisher,
+          const lByteString & time_publish,
+          const lByteString & introduction,
+          const lByteString & isbn)
 {
     //
     _book_name = title;
@@ -870,7 +870,7 @@ void WOLWriter::endPage()
 
 #define USE_001_FORMAT 0
 
-void WOLWriter::addTocItem( int level1index, int level2index, int level3index, int pageNumber, lString8 title )
+void WOLWriter::addTocItem( int level1index, int level2index, int level3index, int pageNumber, lByteString title )
 {
 #ifdef _DEBUG_LOG
     fprintf(log, "addTocItem(lvl=%d,%d,%d, page=%d, text=%s\n", level1index, level2index, level3index, pageNumber, title.c_str());

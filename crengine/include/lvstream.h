@@ -219,6 +219,13 @@ inline LVStream &operator<<(LVStream &stream, const lString8 &str) {
     return stream;
 }
 
+/// Writes lString8 string to stream
+inline LVStream &operator<<(LVStream &stream, const lByteString &str) {
+    if (!str.empty())
+        stream.Write(str.c_str(), sizeof(lChar8) * str.length(), NULL);
+    return stream;
+}
+
 /// Writes lChar32 string to stream
 inline LVStream &operator<<(LVStream &stream, const lChar32 *str) {
     if (str)

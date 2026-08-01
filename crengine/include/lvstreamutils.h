@@ -120,7 +120,7 @@ bool LVDeleteDirectory( lString8 filename );
 /// rename file
 bool LVRenameFile(lString32 oldname, lString32 newname);
 /// rename file
-bool LVRenameFile(lString8 oldname, lString8 newname);
+bool LVRenameFile(lByteString oldname, lByteString lByteString);
 
 /// copies content of in stream to out stream
 lvsize_t LVPumpStream( LVStreamRef out, LVStreamRef in );

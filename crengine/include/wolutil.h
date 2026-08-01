@@ -35,7 +35,7 @@
 class WOLBase {
 protected:
     LVStream * _stream;
-    lString8 _book_name; 
+    lByteString _book_name; 
     lUInt16 _book_title_size;  // 0x17
     lUInt32 _cover_image_size; // 0x19    
     //lUInt32 _page_index_size;  // 0x1E
@@ -74,7 +74,7 @@ class WOLWriter : public WOLBase {
         int l2index;
         int l3index;
         int page;
-        lString8 name;
+        lByteString name;
         int catindex;
         TocItemInfo * parent;
         TocItemInfo * firstChild;
@@ -124,7 +124,7 @@ class WOLWriter : public WOLBase {
             */
             return false;
         }
-        TocItemInfo( int idx, int l1, int l2, int l3, int p, lString8 n )
+        TocItemInfo( int idx, int l1, int l2, int l3, int p, lByteString n )
             : index(idx), l1index(l1), l2index(l2), l3index(l3), page(p), name(n), catindex(0),
             parent(NULL), firstChild(NULL), nextSibling(NULL), prevSibling(NULL)
         {
@@ -139,17 +139,17 @@ class WOLWriter : public WOLBase {
 public:
     WOLWriter( LVStream * stream );
     ~WOLWriter();
-    void addTocItem( int level1index, int level2index, int level3index, int pageNumber, lString8 title );
+    void addTocItem( int level1index, int level2index, int level3index, int pageNumber, lByteString title );
     void addTitle(
-          const lString8 & title,
-          const lString8 & subject,
-          const lString8 & author,
-          const lString8 & adapter,
-          const lString8 & translator,
-          const lString8 & publisher,
-          const lString8 & time_publish,
-          const lString8 & introduction,
-          const lString8 & isbn);
+          const lByteString & title,
+          const lByteString & subject,
+          const lByteString & author,
+          const lByteString & adapter,
+          const lByteString & translator,
+          const lByteString & publisher,
+          const lByteString & time_publish,
+          const lByteString & introduction,
+          const lByteString & isbn);
       void addCoverImage( const lUInt8 * buf, int size );
     void addImage(
       int width, 
