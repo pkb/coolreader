@@ -195,6 +195,30 @@ namespace detail {
     std::basic_string<lChar32> Utf16ToUtf32(const lChar16* str, size_t len);
     std::basic_string<lChar8> Utf32ToUtf8(const lChar32* str, size_t len);
     std::basic_string<lChar16> Utf32ToUtf16(const lChar32* str, size_t len);
+
+    template <typename TargetChar, typename SourceChar>
+    struct Transcoder {
+        // If types match, return a zero-allocation view!
+        static auto run(const SourceChar* str, size_t len) {
+            if constexpr (std::is_same_v<TargetChar, SourceChar>) {
+                return std::basic_string_view<TargetChar>(str, len);
+            }
+            else {
+                if constexpr (std::is_same_v<SourceChar, lChar8>) {
+                    if constexpr (std::is_same_v<TargetChar, lChar16>) return Utf8ToUtf16(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar32>) return Utf8ToUtf32(str, len);
+                }
+                else if constexpr (std::is_same_v<SourceChar, lChar16>) {
+                    if constexpr (std::is_same_v<TargetChar, lChar8>) return Utf16ToUtf8(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar32>) return Utf16ToUtf32(str, len);
+                }
+                else if constexpr (std::is_same_v<SourceChar, lChar32>) {
+                    if constexpr (std::is_same_v<TargetChar, lChar8>) return Utf32ToUtf8(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar16>) return Utf32ToUtf16(str, len);
+                }
+            }
+        }
+    };
 }
 
 namespace fmt {
@@ -419,15 +443,8 @@ public:
         }
         size_t length = lStr_len(other);
 
-        if constexpr (std::is_same_v<CharT, lChar16>) {
-            auto converted = detail::Utf8ToUtf16(other, length);
-            base::assign(converted.data(), converted.size());
-        }
-        else if constexpr (std::is_same_v<CharT, lChar32>) {
-            auto converted = detail::Utf8ToUtf32(other, length);
-            base::assign(converted.data(), converted.size());
-        }
-
+        auto converted = detail::Transcoder<CharT, lChar8>::run(other, length);
+        base::assign(converted.data(), converted.size());
         return *this;
     }
 
@@ -438,19 +455,11 @@ public:
 
     explicit basic_lstring(const lChar8* str, size_type count)
     {
-        if (!str || count == 0) return;
+        if (!str || count == 0)
+            return;
 
-        if constexpr (std::is_same_v<CharT, lChar8>) {
-            base::assign(str, count);
-        }
-        else if constexpr (std::is_same_v<CharT, lChar16>) {
-            auto converted = detail::Utf8ToUtf16(str, count);
-            base::assign(converted.data(), converted.size());
-        }
-        else if constexpr (std::is_same_v<CharT, lChar32>) {
-            auto converted = detail::Utf8ToUtf32(str, count);
-            base::assign(converted.data(), converted.size());
-        }
+        auto converted = detail::Transcoder<CharT, lChar8>::run(str, count);
+        base::assign(converted.data(), converted.size());
     }
 
     explicit basic_lstring(const lChar16* str)
@@ -458,19 +467,11 @@ public:
 
     explicit basic_lstring(const lChar16* str, size_type count)
     {
-        if (!str || count == 0) return;
+        if (!str || count == 0)
+            return;
 
-        if constexpr (std::is_same_v<CharT, lChar16>) {
-            base::assign(str, count);
-        }
-        else if constexpr (std::is_same_v<CharT, lChar8>) {
-            auto converted = detail::Utf16ToUtf8(str, count);
-            base::assign(converted.data(), converted.size());
-        }
-        else if constexpr (std::is_same_v<CharT, lChar32>) {
-            auto converted = detail::Utf16ToUtf32(str, count);
-            base::assign(converted.data(), converted.size());
-        }
+        auto converted = detail::Transcoder<CharT, lChar16>::run(str, count);
+        base::assign(converted.data(), converted.size());
     }
 
     explicit basic_lstring(const lChar32* str)
@@ -478,19 +479,11 @@ public:
 
     explicit basic_lstring(const lChar32* str, size_type count)
     {
-        if (!str || count == 0) return;
+        if (!str || count == 0)
+            return;
 
-        if constexpr (std::is_same_v<CharT, lChar32>) { // Assuming lChar32 type alignment
-            base::assign(str, count);
-        }
-        else if constexpr (std::is_same_v<CharT, lChar8>) {
-            auto converted = detail::Utf32ToUtf8(str, count);
-            base::assign(converted.data(), converted.size());
-        }
-        else if constexpr (std::is_same_v<CharT, lChar16>) {
-            auto converted = detail::Utf32ToUtf16(str, count);
-            base::assign(converted.data(), converted.size());
-        }
+        auto converted = detail::Transcoder<CharT, lChar32>::run(str, count);
+        base::assign(converted.data(), converted.size());
     }
     lUInt32 getHash() const
     {
@@ -734,7 +727,7 @@ public:
         size_t res = base::rfind(ch);
         return (res == base::npos) ? -1 : static_cast<int>(res);
     }
-    int rpos(CharT* substr) const
+    int rpos(const CharT* substr) const
     {
         if (!substr)
             return -1;
@@ -853,22 +846,26 @@ using lString32 = basic_lstring<lChar32>;
 
 // 1. string + string (Same Type)
 template <typename CharT>
-inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const basic_lstring<CharT>& s2) {
+inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const basic_lstring<CharT>& s2)
+{
     s1.append(s2); // Or s1 += s2; if you mapped += to append
     return s1;     // Compiler uses RVO / Move on return
 }
 
 // 2. string + C-string (Same Type)
 template <typename CharT>
-inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const CharT* s2) {
-    if (s2) s1.append(s2);
+inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const CharT* s2)
+{
+    if (s2)
+        s1.append(s2);
     return s1;
 }
 
 // 3. string + Foreign Pointer (Mixed-Width Conversion)
 template <typename CharT, typename OtherCharT,
           typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
-inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const OtherCharT* s2) {
+inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const OtherCharT* s2)
+{
     if (s2) {
         s1.append(basic_lstring<CharT>(s2));
     }
@@ -877,29 +874,34 @@ inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const OtherCharT*
 
 // 4. string + fmt::decimal
 template <typename CharT>
-inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::decimal v) {
+inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::decimal v)
+{
     appendDecimal(s1, v.get());
     return s1;
 }
 
 // 5. string + fmt::hex
 template <typename CharT>
-inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::hex v) {
+inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::hex v)
+{
     appendHex(s1, v.get());
     return s1;
 }
 
 // C-string + string (Same Width)
 template <typename CharT>
-inline basic_lstring<CharT> operator+(const CharT* s1, basic_lstring<CharT> s2) {
-    if (s1) s2.insert(0, s1);
+inline basic_lstring<CharT> operator+(const CharT* s1, basic_lstring<CharT> s2)
+{
+    if (s1)
+        s2.insert(0, s1);
     return s2;
 }
 
 // Foreign C-string + string (Mixed Width)
 template <typename CharT, typename OtherCharT,
           typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
-inline basic_lstring<CharT> operator+(const OtherCharT* s1, basic_lstring<CharT> s2) {
+inline basic_lstring<CharT> operator+(const OtherCharT* s1, basic_lstring<CharT> s2)
+{
     if (s1) {
         basic_lstring<CharT> converted_left(s1);
         converted_left.append(s2);
