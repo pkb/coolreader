@@ -205,16 +205,22 @@ namespace detail {
             }
             else {
                 if constexpr (std::is_same_v<SourceChar, lChar8>) {
-                    if constexpr (std::is_same_v<TargetChar, lChar16>) return Utf8ToUtf16(str, len);
-                    else if constexpr (std::is_same_v<TargetChar, lChar32>) return Utf8ToUtf32(str, len);
+                    if constexpr (std::is_same_v<TargetChar, lChar16>)
+                        return Utf8ToUtf16(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar32>)
+                        return Utf8ToUtf32(str, len);
                 }
                 else if constexpr (std::is_same_v<SourceChar, lChar16>) {
-                    if constexpr (std::is_same_v<TargetChar, lChar8>) return Utf16ToUtf8(str, len);
-                    else if constexpr (std::is_same_v<TargetChar, lChar32>) return Utf16ToUtf32(str, len);
+                    if constexpr (std::is_same_v<TargetChar, lChar8>)
+                        return Utf16ToUtf8(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar32>)
+                        return Utf16ToUtf32(str, len);
                 }
                 else if constexpr (std::is_same_v<SourceChar, lChar32>) {
-                    if constexpr (std::is_same_v<TargetChar, lChar8>) return Utf32ToUtf8(str, len);
-                    else if constexpr (std::is_same_v<TargetChar, lChar16>) return Utf32ToUtf16(str, len);
+                    if constexpr (std::is_same_v<TargetChar, lChar8>)
+                        return Utf32ToUtf8(str, len);
+                    else if constexpr (std::is_same_v<TargetChar, lChar16>)
+                        return Utf32ToUtf16(str, len);
                 }
             }
         }
