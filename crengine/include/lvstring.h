@@ -753,14 +753,13 @@ public:
         /// returns true if string starts with specified substring
     bool startsWith (const basic_lstring& substring) const
     {
-        //TODO
-        return false;
+        return base::size() >= substring.size() &&
+           base::compare(0, substring.size(), substring) == 0;
     }
     /// returns true if string starts with specified substring
     bool startsWith (const CharT* substring) const
     {
-        //TODO
-        return false;
+        return startsWith(basic_lstring(substring));
     }
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
     int compare(const lChar8 *s) const  { return lStr_cmp(base::c_str(), s); }
