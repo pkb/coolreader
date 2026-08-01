@@ -614,8 +614,22 @@ public:
     // trims spaces at beginning and end of string (modifies and returns *this)
     basic_lstring& trim()
     {
-        //TODO
+        const CharT ws[] = { ' ', '\t', '\0' };
 
+        // Left trim
+        size_t start = base::find_first_not_of(ws);
+        if (start != base::npos) {
+            base::erase(0, start);
+        } else {
+            base::clear(); // String is entirely whitespace
+            return *this;
+        }
+
+        // Right trim
+        size_t end = base::find_last_not_of(ws);
+        if (end != base::npos) {
+            base::erase(end + 1);
+        }
         return *this;
     }
 
@@ -627,6 +641,7 @@ public:
         return *this;
     }
 
+    template <typename T = CharT, typename = std::enable_if_t<std::is_same_v<T, lChar32>>>
     basic_lstring& trimDoubleSpaces( bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens=false )
     {
         //TODO
