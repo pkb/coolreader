@@ -189,12 +189,12 @@ std::size_t lStr_len(const CharT* start)
 }
 
 namespace detail {
-    std::basic_string<lChar16> Utf8ToUtf16(const lChar8* str, size_t len);
-    std::basic_string<lChar32> Utf8ToUtf32(const lChar8* str, size_t len);
-    std::basic_string<lChar8> Utf16ToUtf8(const lChar16* str, size_t len);
-    std::basic_string<lChar32> Utf16ToUtf32(const lChar16* str, size_t len);
-    std::basic_string<lChar8> Utf32ToUtf8(const lChar32* str, size_t len);
-    std::basic_string<lChar16> Utf32ToUtf16(const lChar32* str, size_t len);
+    std::u16string Utf8ToUtf16(const lChar8* str, size_t len);
+    std::u32string Utf8ToUtf32(const lChar8* str, size_t len);
+    std::string    Utf16ToUtf8(const lChar16* str, size_t len);
+    std::u32string Utf16ToUtf32(const lChar16* str, size_t len);
+    std::string    Utf32ToUtf8(const lChar32* str, size_t len);
+    std::u16string Utf32ToUtf16(const lChar32* str, size_t len);
 
     template <typename TargetChar, typename SourceChar>
     struct Transcoder {
@@ -257,18 +257,8 @@ constexpr CharT toHexDigit(int digit) noexcept
 template <typename StringT, typename NumT>
 inline bool StringToNum(const StringT& s, NumT& n)
 {
-    std::string str;
     using CharT = typename StringT::value_type;
-
-    if constexpr (std::is_same_v<CharT, lChar8>) {
-        str = static_cast<std::string>(s);
-    }
-    else if constexpr (std::is_same_v<CharT, lChar16>) {
-        str = detail::Utf16ToUtf8(s.data(), s.size());
-    }
-    else {
-        str = detail::Utf32ToUtf8(s.data(), s.size());
-    }
+    auto str = detail::Transcoder<lChar8, CharT>::run(s.data(), s.size());
 
     const char* p = str.data();
     const char* end = p + str.size();
@@ -334,36 +324,6 @@ std::string NumToString(T value, bool hex = false)
     return std::string(buf, result.ptr - buf);
 }
 
-template <typename StringT>
-void appendString(StringT& dest, const std::string& str)
-{
-    using CharT = typename StringT::value_type;
-
-    // Conditionally compile the correct conversion path based on CharT
-    if constexpr (std::is_same_v<CharT, lChar8>) {
-        dest.append(str.data(), str.size());
-    }
-    else if constexpr (std::is_same_v<CharT, lChar16>) {
-        auto converted = detail::Utf8ToUtf16(str.data(), str.size());
-        dest.append(converted.data(), converted.size());
-    }
-    else {
-        auto converted = detail::Utf8ToUtf32(str.data(), str.size());
-        dest.append(converted.data(), converted.size());
-    }
-}
-
-template <typename StringT>
-void appendDecimal(StringT& str, lInt64 val)
-{
-    appendString(str, NumToString(val));
-}
-
-template <typename StringT>
-void appendHex(StringT& str, lUInt64 val)
-{
-    appendString(str, NumToString(val, true));
-}
 
 #define STRING_HASH_MULT 31
 
@@ -385,51 +345,25 @@ inline lUInt32 getHash(const StringT& s)
     return res;
 }
 
-template <typename Derived, typename CharT>
-class basic_lstring_operators : public std::basic_string<CharT>
-{
-public:
-    using base = std::basic_string<CharT>;
-    using base::basic_string;
-
-    // Cast helper to return references to the final derived class
-    Derived& derived() { return static_cast<Derived&>(*this); }
-
-    Derived& operator<<(CharT c) { base::push_back(c); return derived(); }
-    Derived& operator<<(const CharT* s) { if (s) base::append(s); return derived(); }
-    Derived& operator<<(const base& s) { base::append(s); return derived(); }
-    Derived& operator<<(const Derived& s) { base::append(s); return derived(); }
-    Derived& operator<<(std::basic_string_view<CharT> sv) { base::append(sv.data(), sv.size()); return derived(); }
-    Derived& operator<<(fmt::decimal v) { appendDecimal(v.get()); return derived(); }
-    Derived& operator<<(fmt::hex v) { appendHex(v.get()); return derived(); }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    Derived& operator<<(const lChar8* s) { appendLiteral(s); return derived();  }
-    Derived& appendDecimal(lInt64 n) { ::appendDecimal(derived(), n); return derived(); }
-    Derived& appendHex(lUInt64 n) { ::appendHex(derived(), n); return derived(); }
-
-    Derived& operator+=( CharT c ) { base::push_back(c); return derived(); }
-    Derived& operator+=( const CharT * s ) { if (s) base::append(s); return derived(); }
-    Derived& operator+=(const base& s) { base::append(s); return derived(); }
-    Derived& operator+=(const Derived& s) { base::append(s); return derived(); }
-    Derived& operator+=(std::basic_string_view<CharT> sv) { base::append(sv.data(), sv.size()); return derived(); }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    Derived& operator+=(const lChar8* s) { appendLiteral(s); return derived();  }
-    Derived& operator+=(fmt::decimal v) { appendDecimal(v.get()); return derived(); }
-    Derived& operator+=(fmt::hex v) { appendHex(v.get()); return derived(); }
-private:
-    void appendLiteral(const lChar8* s)
-    {
-        if (!s || *s == '\0')
-            return;
-        appendString(derived(), std::string(s));
-    }
-};
-
 template <typename CharT>
-class basic_lstring : public basic_lstring_operators<basic_lstring<CharT>, CharT>
+class basic_lstring : public std::basic_string<CharT>
 {
+    using base = std::basic_string<CharT>;
+    explicit basic_lstring(base&& standard_string) noexcept
+        : base(std::move(standard_string)) {   }
+    template <typename OtherCharT, typename OperationFunc>
+    void process_mixed(const OtherCharT* str, size_t len, OperationFunc&& op)
+    {
+        if (!str || len == 0) return;
+
+        if constexpr (std::is_same_v<CharT, OtherCharT>) {
+            op(reinterpret_cast<const CharT*>(str), len);
+        } else {
+            auto converted = detail::Transcoder<CharT, OtherCharT>::run(str, len);
+            op(converted.data(), converted.size());
+        }
+    }
 public:
-    using base = basic_lstring_operators<basic_lstring<CharT>, CharT>;
     using size_type = typename base::size_type;
     using base::base;
     using base::compare;
@@ -450,7 +384,7 @@ public:
         size_t length = lStr_len(other);
 
         auto converted = detail::Transcoder<CharT, lChar8>::run(other, length);
-        base::assign(converted.data(), converted.size());
+        base::assign(std::move(converted));
         return *this;
     }
 
@@ -477,7 +411,7 @@ public:
             return;
 
         auto converted = detail::Transcoder<CharT, lChar16>::run(str, count);
-        base::assign(converted.data(), converted.size());
+        base::assign(std::move(converted));
     }
 
     explicit basic_lstring(const lChar32* str)
@@ -489,7 +423,7 @@ public:
             return;
 
         auto converted = detail::Transcoder<CharT, lChar32>::run(str, count);
-        base::assign(converted.data(), converted.size());
+        base::assign(std::move(converted));
     }
     lUInt32 getHash() const
     {
@@ -641,7 +575,6 @@ public:
     basic_lstring& trimNonAlpha()
     {
         //TODO
-
         return *this;
     }
 
@@ -713,11 +646,13 @@ public:
         size_t res = base::find(subStr, static_cast<size_t>(start));
         return (res == base::npos) ? -1 : static_cast<int>(res);
     }
-    int pos(const CharT* subStr, int startPos = 0) const
+    template <typename OtherCharT>
+    int pos(const OtherCharT* subStr, int startPos = 0) const
     {
         if (!subStr)
             return -1;
-        size_t res = base::find(subStr, static_cast<size_t>(startPos));
+        auto converted = detail::Transcoder<CharT, OtherCharT>::run(subStr, lStr_len(subStr));
+        size_t res = base::find(converted, static_cast<size_t>(startPos));
         return (res == base::npos) ? -1 : static_cast<int>(res);
     }
     template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
@@ -733,64 +668,34 @@ public:
         size_t res = base::rfind(ch);
         return (res == base::npos) ? -1 : static_cast<int>(res);
     }
-    int rpos(const CharT* substr) const
+    template <typename OtherCharT>
+    int rpos(const OtherCharT* substr) const
     {
         if (!substr)
             return -1;
-        size_t res = base::rfind(substr);
+        auto converted = detail::Transcoder<CharT, OtherCharT>::run(substr, lStr_len(substr));
+        size_t res = base::rfind(converted);
         return (res == base::npos) ? -1 : static_cast<int>(res);
-    }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    int rpos(const lChar8* substr) const
-    {
-        if (!substr)
-            return -1;
-        basic_lstring converted(substr);
-        return rpos(converted.c_str());
+
     }
     int rpos(const basic_lstring& substr) const
     {
         size_t res = base::rfind(substr);
         return (res == base::npos) ? -1 : static_cast<int>(res);
     }
-
-        /// returns true if string starts with specified substring
+    /// returns true if string starts with specified substring
     bool startsWith (const basic_lstring& substring) const
     {
         return base::size() >= substring.size() &&
            base::compare(0, substring.size(), substring) == 0;
     }
     /// returns true if string starts with specified substring
-    bool startsWith (const CharT* substring) const
+    template <typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<OtherCharT, CharT>>>
+    bool startsWith (const OtherCharT* substring) const
     {
-        return startsWith(basic_lstring(substring));
-    }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    int compare(const lChar8 *s) const  { return lStr_cmp(base::c_str(), s); }
-    basic_lstring& append(const basic_lstring& str)
-    {
-        base::append(str);
-        return *this;
-    }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    basic_lstring& append(const lChar8 * str)
-    {
-        if (str)
-            appendString(*this, std::string(str));
-        return *this;
-    }
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    basic_lstring& append(const lChar8 * str, size_type count)
-    {
-        if (str && count > 0)
-            appendString(*this, std::string(str, count));
-        return *this;
-    }
-    /// returns true if string starts with specified substring (8bit ASCII only)
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    bool startsWith (const lChar8 * substring) const
-    {
-        return startsWith(basic_lstring(substring));
+        auto converted = detail::Transcoder<CharT, OtherCharT>::run(substring, lStr_len(substring));
+        return base::size() >= converted.size() &&
+           base::compare(0, converted.size(), converted) == 0;
     }
     /// returns true if string ends with specified substring
     bool endsWith(const basic_lstring& substring) const
@@ -804,10 +709,12 @@ public:
         return endsWith(basic_lstring(substring));
     }
     /// returns true if string ends with specified substring (8-bit ASCII only)
-    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
-    bool endsWith(const lChar8* substring) const
+    template <typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<OtherCharT, CharT>>>
+    bool endsWith(const OtherCharT* substring) const
     {
-        return endsWith(basic_lstring(substring));
+        auto converted = detail::Transcoder<CharT, OtherCharT>::run(substring, lStr_len(substring));
+        return base::size() >= converted.size() &&
+            base::compare(base::size() - converted.size(), converted.size(), converted) == 0;
     }
     /// returns true if string starts with specified substring, case insensitive
     bool startsWithNoCase(const basic_lstring& substring) const
@@ -823,6 +730,82 @@ public:
     CharT lastChar() { return base::empty() ? 0 : base::at(base::length()-1); }
     /// returns first character
     CharT firstChar() { return base::empty() ? 0 : base::at(0); }
+
+    template <typename OtherCharT>
+    basic_lstring& append_mixed(const basic_lstring<OtherCharT>& other)
+    {
+        process_mixed(other.data(), other.size(), [this](const CharT* data, size_t len) {
+            this->append(data, len);
+        });
+        return *this;
+    }
+
+    template <typename OtherCharT>
+    basic_lstring& append_mixed(const OtherCharT* str, size_t count)
+    {
+        process_mixed(str, count, [this](const CharT* data, size_t len) {
+            this->append(data, len);
+        });
+        return *this;
+    }
+
+    template <typename OtherCharT>
+    basic_lstring& append_mixed(const OtherCharT* str)
+    {
+        process_mixed(str, lStr_len(str), [this](const CharT* data, size_t len) {
+            this->append(data, len);
+        });
+        return *this;
+    }
+
+    template <typename OtherCharT>
+    basic_lstring& insert_mixed(size_type index, const OtherCharT* str)
+    {
+        if (str) {
+            process_mixed(str, lStr_len(str), [this, index](const CharT* data, size_t len) {
+                this->insert(index, data, len);
+            });
+        }
+        return *this;
+    }
+
+    template <typename OtherCharT>
+    basic_lstring& insert_mixed(size_type index, const basic_lstring<OtherCharT>& other)
+    {
+        process_mixed(other.data(), other.size(), [this, index](const CharT* data, size_t len) {
+            this->insert(index, data, len);
+        });
+        return *this;
+    }
+
+    template <typename OtherCharT>
+    basic_lstring& insert_mixed(size_type index, const OtherCharT* str, size_t count)
+    {
+        process_mixed(str, count, [this, index](const CharT* data, size_t len) {
+            this->insert(index, data, len);
+        });
+        return *this;
+    }
+
+    basic_lstring& append(const basic_lstring& str)
+    {
+        base::append(str);
+        return *this;
+    }
+    template <typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<OtherCharT, CharT>>>
+    basic_lstring& append(const OtherCharT* str)
+    {
+        if (str)
+            append_mixed(str);
+        return *this;
+    }
+    template <typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+    basic_lstring& append(const OtherCharT * str, size_type count)
+    {
+        if (str && count > 0)
+            append_mixed(str, count);
+        return *this;
+    }
     // We don't use COW so just return data() which is writable
     CharT* modify() { return base::data(); }
     basic_lstring& pack() { return *this; }
@@ -839,6 +822,83 @@ public:
         if (size < base::size()) {
             base::erase(size);
         }
+    }
+
+    template <typename T, typename = std::enable_if_t<!std::is_same_v<T, CharT>>>
+    inline int compare_mixed(const basic_lstring<T>& other, size_type pos = 0, size_type count = base::npos) const
+    {
+        return compare_mixed(other.data(), pos, count);
+    }
+
+    template <typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<OtherCharT, CharT>>>
+    inline int compare_mixed(const OtherCharT* str, size_type pos = 0, size_type count = base::npos) const
+    {
+        if(count == base::npos) {
+            count = lStr_len(str);
+        }
+        if constexpr (std::is_same_v<CharT, OtherCharT>) {
+            return this->compare(pos, count, reinterpret_cast<const CharT*>(str));
+        } else {
+            auto converted = detail::Transcoder<CharT, OtherCharT>::run(str, lStr_len(str));
+            return this->compare(pos, count, converted);
+        }
+    }
+
+    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
+    int compare(const lChar8 *s) const  { return compare_mixed(s); }
+
+    basic_lstring& operator<<(CharT c) { base::push_back(c); return *this; }
+    basic_lstring& operator<<(const CharT* s) { if (s) base::append(s); return *this; }
+    basic_lstring& operator<<(const basic_lstring& s) { base::append(s); return *this; }
+    basic_lstring& operator<<(std::basic_string_view<CharT> sv) {
+        base::append(sv.data(), sv.size());
+        return *this;
+    }
+    basic_lstring& operator<<(fmt::decimal v)
+    {
+        auto str = NumToString(v.get());
+        append_mixed(str.data(), str.size());
+        return *this;
+    }
+    basic_lstring& operator<<(fmt::hex v)
+    {
+        auto str = NumToString(v.get(), true);
+        append_mixed(str.data(), str.size());
+        return *this;
+    }
+    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
+    basic_lstring& operator<<(const lChar8* s) { append_mixed(s); return *this; }
+    basic_lstring& appendDecimal(lInt64 n)
+    {
+        auto str = NumToString(n);
+        append_mixed(str.data(), str.size());
+        return *this;
+    }
+    basic_lstring& appendHex(lUInt64 n)
+    {
+        auto str = NumToString(n, true);
+        append_mixed(str.data(), str.size());
+        return *this;
+    }
+    basic_lstring& operator+=( CharT c ) { base::push_back(c); return *this; }
+    basic_lstring& operator+=( const CharT * s ) { if (s) base::append(s); return *this; }
+    basic_lstring& operator+=(const base& s) { base::append(s); return *this; }
+    basic_lstring& operator+=(const basic_lstring& s) { base::append(s); return *this; }
+    basic_lstring& operator+=(std::basic_string_view<CharT> sv) {
+        base::append(sv.data(), sv.size());
+        return *this;
+    }
+    template <typename T = CharT, typename = std::enable_if_t<!std::is_same_v<T, lChar8>>>
+    basic_lstring& operator+=(const lChar8* s) { append_mixed(s); return *this; }
+    basic_lstring& operator+=(fmt::decimal v) {
+        auto str = NumToString(v.get());
+        append_mixed(str.data(), str.size());
+        return *this;
+    }
+    basic_lstring& operator+=(fmt::hex v) {
+        auto str = NumToString(v.get(), true);
+        append_mixed(str.data(), str.size());
+        return *this;
     }
 
     static inline const basic_lstring<CharT> empty_str{};
@@ -873,7 +933,7 @@ template <typename CharT, typename OtherCharT,
 inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const OtherCharT* s2)
 {
     if (s2) {
-        s1.append(basic_lstring<CharT>(s2));
+        s1.append_mixed(s2);
     }
     return s1;
 }
@@ -882,7 +942,8 @@ inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, const OtherCharT*
 template <typename CharT>
 inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::decimal v)
 {
-    appendDecimal(s1, v.get());
+    auto str = NumToString(v.get());
+    s1.append_mixed(str.data(), str.size());
     return s1;
 }
 
@@ -890,7 +951,8 @@ inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::decimal v)
 template <typename CharT>
 inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::hex v)
 {
-    appendHex(s1, v.get());
+    auto str = NumToString(v.get(), true);
+    s1.append_mixed(str.data(), str.size());
     return s1;
 }
 
@@ -909,80 +971,51 @@ template <typename CharT, typename OtherCharT,
 inline basic_lstring<CharT> operator+(const OtherCharT* s1, basic_lstring<CharT> s2)
 {
     if (s1) {
-        basic_lstring<CharT> converted_left(s1);
-        converted_left.append(s2);
-        return converted_left;
+        s2.insert_mixed(0, s1);
     }
     return s2;
 }
 
 template <typename CharT>
-inline bool operator==(const basic_lstring<CharT>& lhs, const CharT* rhs)
+inline bool operator==(const basic_lstring<CharT>& lhs, const basic_lstring<CharT>& rhs)
 {
-    if (!rhs)
-        return lhs.empty();
     return lhs.compare(rhs) == 0;
 }
-template <typename CharT>
-inline bool operator==(const CharT* lhs, const basic_lstring<CharT>& rhs)
+
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator==(const basic_lstring<CharT>& lhs, const OtherCharT* rhs)
 {
-    return rhs == lhs; // Reuses the operator above
+    return lhs.compare_mixed(rhs) == 0;
 }
 
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator==(const basic_lstring<CharT>& lhs, const lChar8* rhs)
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator==(const OtherCharT* lhs, const basic_lstring<CharT>& rhs)
 {
-    if (!rhs) return lhs.empty();
-
-    // Convert the incoming UTF-8 literal to match this string's encoding
-    size_t len = lStr_len(rhs);
-    if constexpr (std::is_same_v<CharT, lChar16>) {
-        return lhs == detail::Utf8ToUtf16(rhs, len).c_str();
-    } else {
-        return lhs == detail::Utf8ToUtf32(rhs, len).c_str();
-    }
+    return rhs.compare_mixed(lhs) == 0;
 }
 
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator==(const lChar8* lhs, const basic_lstring<CharT>& rhs)
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator==(const basic_lstring<CharT>& lhs, const basic_lstring<OtherCharT>& rhs)
 {
-    return rhs == lhs; // Reuses the operator above
+    return lhs.compare_mixed(rhs) == 0;
 }
 
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator==(const basic_lstring<CharT>& lhs, const basic_lstring<lChar8>& rhs)
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator!=(const basic_lstring<OtherCharT>& lhs, const basic_lstring<CharT>& rhs)
 {
-    return lhs == rhs.c_str();
+    return !(lhs == rhs);
 }
 
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator==(const basic_lstring<lChar8>& lhs, const basic_lstring<CharT>& rhs)
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator!=(const basic_lstring<CharT>& lhs, const OtherCharT* rhs)
 {
-    return rhs == lhs; // Reuses the operator above
+    return !(lhs == rhs);
 }
 
-template <typename CharT>
-inline bool operator!=(const basic_lstring<CharT>& lhs, const CharT* rhs)
+template <typename CharT, typename OtherCharT, typename = std::enable_if_t<!std::is_same_v<CharT, OtherCharT>>>
+inline bool operator!=(const OtherCharT* lhs, const basic_lstring<CharT>& rhs)
 {
-    return !(lhs == rhs); // Leverages the operator== you already wrote
-}
-
-template <typename CharT>
-inline bool operator!=(const CharT* lhs, const basic_lstring<CharT>& rhs)
-{
-    return !(rhs == lhs);
-}
-
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator!=(const basic_lstring<CharT>& lhs, const lChar8* rhs)
-{
-    return !(lhs == rhs); // Leverages the templated operator==
-}
-
-template <typename CharT, typename = std::enable_if_t<!std::is_same_v<CharT, lChar8>>>
-inline bool operator!=(const lChar8* lhs, const basic_lstring<CharT>& rhs)
-{
-    return !(rhs == lhs);
+    return !(lhs == rhs);
 }
 
 #define cs32(str) lString32(str)
