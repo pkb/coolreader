@@ -627,6 +627,12 @@ public:
     bool atod( double &d, char dp = '.' ) const
     {
         d = 0.0;
+        if(dp != '.') {
+            basic_lstring tmp = *this;
+            //AFAIK from_chars expects decimal point as in C locale, i.e. '.'
+            std::replace(tmp.begin(), tmp.end(), dp, '.');
+            return StringToNum(tmp, d);
+        }
         return StringToNum(*this, d);
     }
     /// find position of char inside string, -1 if not found
