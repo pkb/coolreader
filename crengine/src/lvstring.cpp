@@ -488,11 +488,11 @@ int lStr_cmp(const lChar16 * dst, const lChar32 * src)
         return -1;
 }
 
-bool isAlNum(lChar32 ch) {
+bool isAlNum(lChar32 ch)
+{
     lUInt16 props = lGetCharProps(ch);
     return (props & (CH_PROP_ALPHA | CH_PROP_DIGIT)) != 0;
 }
-
 
 // returns 0..15 if c is hex digit, -1 otherwise
 int hexDigit( int c )
@@ -2750,22 +2750,22 @@ lString32 removeSoftHyphens( lString32 s )
     return s;
 }
 
-std::basic_string<lChar16> detail::Utf8ToUtf16(const lChar8* s, size_t count)
+std::u16string detail::Utf8ToUtf16(const lChar8* s, size_t count)
 {
     //FIXME: double conversion, but seems ok, because we don't use
     // this conversion in practice
-    std::basic_string<lChar32> utf32 = detail::Utf8ToUtf32(s, count);
+    std::u32string utf32 = detail::Utf8ToUtf32(s, count);
     return detail::Utf32ToUtf16(utf32.c_str(), lStr_len(utf32.c_str()));
 }
 
-std::basic_string<lChar32> detail::Utf8ToUtf32(const lChar8* s, size_t count)
+std::u32string detail::Utf8ToUtf32(const lChar8* s, size_t count)
 {
     if (!s || !s[0] || count == 0)
       return {};
     int len = Utf8CharCount( s );
     if (!len)
       return {};
-    std::basic_string<lChar32> dst(len, 0);
+    std::u32string dst(len, 0);
     lChar32 * p = dst.data();
     DecodeUtf8(s, p, len);
     return dst;
@@ -2775,32 +2775,32 @@ std::basic_string<lChar8> detail::Utf16ToUtf8(const lChar16* s, size_t count)
 {
     //FIXME: double conversion, but seems ok, because we don't use
     // this conversion in practice
-    std::basic_string<lChar32> utf32 = detail::Utf16ToUtf32(s, count);
+    std::u32string utf32 = detail::Utf16ToUtf32(s, count);
     return detail::Utf32ToUtf8(utf32.c_str(), lStr_len(utf32.c_str()));
 
 }
 
-std::basic_string<lChar32> detail::Utf16ToUtf32(const lChar16* s, size_t count)
+std::u32string detail::Utf16ToUtf32(const lChar16* s, size_t count)
 {
     if (!s || !s[0] || count <= 0)
       return {};
     int len = Utf16CharCount( s, count );
     if (!len)
       return {};
-    std::basic_string<lChar32> dst(len, 0);
+    std::u32string dst(len, 0);
     lChar32 * p = dst.data();
     DecodeUtf16(s, p, len);
     return dst;
 }
 
-std::basic_string<lChar8> detail::Utf32ToUtf8(const lChar32* s, size_t count)
+std::string detail::Utf32ToUtf8(const lChar32* s, size_t count)
 {
     if (count <= 0)
       return {};
     int len = Utf8ByteCount(s, count);
     if (len <= 0)
       return {};
-    std::basic_string<lChar8> dst(len, 0);
+    std::string dst(len, 0);
     lChar8 * buf = dst.data();
     {
         lUInt32 ch;
@@ -2830,14 +2830,14 @@ std::basic_string<lChar8> detail::Utf32ToUtf8(const lChar32* s, size_t count)
     return dst;
 }
 
-std::basic_string<lChar16> detail::Utf32ToUtf16(const lChar32* s, size_t count)
+std::u16string detail::Utf32ToUtf16(const lChar32* s, size_t count)
 {
     if (!s || count <= 0)
         return {};
     int len = Utf16WordCount(s, count);
     if (len <= 0)
       return {};
-    std::basic_string<lChar16> dst(len, 0);
+    std::u16string dst(len, 0);
     lChar16 * buf = dst.data();
     {
         lUInt32 ch;
