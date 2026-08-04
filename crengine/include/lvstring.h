@@ -188,6 +188,8 @@ std::size_t lStr_len(const CharT* start)
     return start ? std::char_traits<CharT>::length(start) : 0;
 }
 
+bool isAlNum(lChar32 ch);
+
 namespace detail {
     std::u16string Utf8ToUtf16(const lChar8* str, size_t len);
     std::u32string Utf8ToUtf32(const lChar8* str, size_t len);
@@ -348,6 +350,8 @@ inline lUInt32 getHash(const StringT& s)
     }
     return res;
 }
+
+int TrimDoubleSpaces(lChar32 * buf, int len,  bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens);
 
 template <typename CharT>
 class basic_lstring : public std::basic_string<CharT>
@@ -575,22 +579,47 @@ public:
     }
 
     // trims non-alpha at beginning and end of string
+    template <typename T = CharT, typename = std::enable_if_t<std::is_same_v<T, lChar32>>>
     basic_lstring& trimNonAlpha()
     {
-        //TODO
+        size_t start;
+        for (start = 0; start < this->size() && !isAlNum(*this[start]); ++start) 
+            ;
+
+        if (start >= this->size()) {
+            this->clear();
+            return *this;
+        }
+        else if(start > 0) {
+            base::erase(0, start);
+        }
+
+        size_t end;
+        for (end = this->size(); end>0 && !isAlNum(*this[end - 1]); --end)
+            ;
+
+            if (end < this->size()) {
+            base::erase(end);
+        }
         return *this;
     }
 
     template <typename T = CharT, typename = std::enable_if_t<std::is_same_v<T, lChar32>>>
     basic_lstring& trimDoubleSpaces( bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens=false )
     {
-        //TODO
+        if (this->empty())
+            return *this;
+        int len = this->length();
+        int nlen = TrimDoubleSpaces(this->data(), len,  allowStartSpace, allowEndSpace, removeEolHyphens);
+        if (nlen < len)
+            limit(nlen);
         return *this;
+
     }
+
     // ------------------------------------------------------------------------
     // Conversion Functions (String -> Integer)
     // ------------------------------------------------------------------------
-
     // converts to integer, returns 0 on failure (classic legacy behavior)
     int atoi() const
     {
@@ -829,7 +858,7 @@ public:
     void limit( size_type size )
     {
         if (size < base::size()) {
-            base::erase(size);
+            base::resize(size);
         }
     }
 
@@ -1084,8 +1113,6 @@ lString32 Wtf8ToUnicode( const char * s, int sz );
 lString32 DecodeHTMLUrlString( lString32 s );
 /// truncates string by specified size, appends ... if truncated, prefers to wrap whole words
 void limitStringSize(lString32 & str, int maxSize);
-
-int TrimDoubleSpaces(lChar32 * buf, int len,  bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens);
 
 /// remove soft-hyphens from string
 lString32 removeSoftHyphens( lString32 s );

@@ -488,11 +488,11 @@ int lStr_cmp(const lChar16 * dst, const lChar32 * src)
         return -1;
 }
 
-bool isAlNum(lChar32 ch) {
+bool isAlNum(lChar32 ch)
+{
     lUInt16 props = lGetCharProps(ch);
     return (props & (CH_PROP_ALPHA | CH_PROP_DIGIT)) != 0;
 }
-
 
 // returns 0..15 if c is hex digit, -1 otherwise
 int hexDigit( int c )
