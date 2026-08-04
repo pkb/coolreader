@@ -260,7 +260,7 @@ inline bool StringToNum(const StringT& s, NumT& n)
     using CharT = typename StringT::value_type;
     auto str = detail::Transcoder<lChar8, CharT>::run(s.data(), s.size());
 
-    const char* p = str.data();
+    const char* p = reinterpret_cast<const char*>(str.data());
     const char* end = p + str.size();
 
     while (p < end && (*p == ' ' || *p == '\t')) ++p;
@@ -269,8 +269,11 @@ inline bool StringToNum(const StringT& s, NumT& n)
     std::from_chars_result result;
 
     if constexpr (std::is_floating_point_v<NumT>) {
-        // Floating point logic (does not accept a base argument)
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
         result = std::from_chars(p, end, n, std::chars_format::general);
+#else
+        // TODO: use legacy code
+#endif
     }
     else if constexpr (std::is_integral_v<NumT>) {
         if (end - p >= 2 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
@@ -302,16 +305,17 @@ std::string NumToString(T value, bool hex = false)
     // A 64-byte buffer is safely large enough for any 64-bit integer or double-precision float
     const size_t buf_size = 64;
     lChar8 buf[buf_size]{};
+    char* char_buf = reinterpret_cast<char*>(buf);
     std::to_chars_result result;
 
     if constexpr (std::is_floating_point_v<T>) {
         // Floating point values (float/double) - std::to_chars ignores fmt flags here
-        result = std::to_chars(buf, buf + buf_size, value);
+        result = std::to_chars(char_buf, buf + buf_size, value);
     }
     else if constexpr (std::is_integral_v<T>) {
         // Integral values (int, int64_t, uint32_t, etc.)
         int base = hex ? 16 : 10;
-        result = std::to_chars(buf, buf + buf_size, value, base);
+        result = std::to_chars(char_buf, buf + buf_size, value, base);
     }
     else {
         static_assert(std::is_arithmetic_v<T>, "to_lstring only supports numeric types.");
@@ -321,7 +325,7 @@ std::string NumToString(T value, bool hex = false)
     if (result.ec != std::errc{}) {
         return {};
     }
-    return std::string(buf, result.ptr - buf);
+    return std::string(buf, result.ptr - char_buf);
 }
 
 
@@ -432,8 +436,7 @@ public:
     // --- Substring (Overrides standard to return the wrapper class rather than raw std::string) ---
     basic_lstring substr(size_type pos = 0, size_type count = base::npos) const
     {
-        auto raw_sub = base::substr(pos, count);
-        return basic_lstring(raw_sub.data(), raw_sub.size());
+        return basic_lstring(base::substr(pos, count));
     }
     basic_lstring& replace(size_type p0, size_type n0, const CharT* str)
     {
@@ -478,7 +481,7 @@ public:
 
     bool replaceParam(int index, const basic_lstring& value)
     {
-        return replace(basic_lstring("") + fmt::decimal(index), value);
+        return replace(basic_lstring("$") + fmt::decimal(index), value);
     }
 
     bool replaceIntParam(int index, int replaceNumber)
@@ -966,8 +969,11 @@ inline basic_lstring<CharT> operator+(basic_lstring<CharT> s1, fmt::hex v)
 template <typename CharT>
 inline basic_lstring<CharT> operator+(const CharT* s1, basic_lstring<CharT> s2)
 {
-    if (s1)
-        s2.insert(0, s1);
+    if (s1) {
+        basic_lstring<CharT> res(s1);
+        res.append(s2);
+        return res;
+    }
     return s2;
 }
 
