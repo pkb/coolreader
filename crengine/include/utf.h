@@ -1,5 +1,6 @@
 /***************************************************************************
  *   CoolReader engine                                                     *
+ *   Copyright (C) 2019,2020 Konstantin Potapov <pkbo@users.sourceforge.net>
  *                                                                         *
  *   This program is free software; you can redistribute it and/or         *
  *   modify it under the terms of the GNU General Public License           *
@@ -17,11 +18,6 @@
  *   MA 02110-1301, USA.                                                   *
  ***************************************************************************/
 
-/**
- * \file utf.h
- * \brief string classes interface
- */
-
 #ifndef __LV_UTF_H_INCLUDED__
 #define __LV_UTF_H_INCLUDED__
 
@@ -33,24 +29,118 @@
 #include <utility>
 
 template<class Iterator>
-struct decode_result 
+struct decode_result
 {
     lChar32 code_point;
     Iterator next;
 };
 
-struct utf8_decoder 
+constexpr lChar32 REPLACEMENT_CHARACTER = static_cast<lChar32>(0xFFFD);
+
+constexpr bool is_unicode_scalar(lChar32 cp) noexcept
+{
+    const lUInt32 u = static_cast<lUInt32>(cp);
+
+    return u <= 0x10FFFF
+        && !(u >= 0xD800 && u <= 0xDFFF);
+}
+
+static lChar32 utf8_decode_next(const lUInt8*& src, const lUInt8* end)
+{
+    if (src >= end) return 0;
+
+    lUInt8 lead = *src++;
+    lUInt32 cp = lead;
+    size_t bytes = 0;
+
+    if (lead < 0x80) {
+        return lead;
+    } else if (lead >= 0xC0 && lead < 0xE0) {
+        cp = lead & 0x1F; bytes = 2;
+    } else if (lead >= 0xE0 && lead < 0xF0) {
+        cp = lead & 0x0F; bytes = 3;
+    } else if (lead >= 0xF0 && lead < 0xF8) {
+        cp = lead & 0x07; bytes = 4;
+    } else {
+        // Invalid lead byte (0x80..0xBF, 0xF8..0xFF)
+        return REPLACEMENT_CHARACTER;
+    }
+
+    // Check if we have enough bytes left in the buffer
+    if (src + (bytes - 1) > end) {
+        src = end; // Consume the truncated sequence
+        return REPLACEMENT_CHARACTER;
+    }
+
+    // Read continuation bytes
+    for (size_t i = 1; i < bytes; ++i) {
+        lUInt8 cont = *src; // Peek
+        if ((cont & 0xC0) != 0x80) {
+            // Invalid continuation byte. Do NOT consume it.
+            // It will be processed as the lead byte of the next sequence.
+            return REPLACEMENT_CHARACTER;
+        }
+        ++src; // Valid continuation, consume it.
+        cp = (cp << 6) | (cont & 0x3F);
+    }
+
+    // --- Validation ---
+    // Overlong check
+    if ((bytes == 2 && cp < 0x80) ||
+        (bytes == 3 && cp < 0x800) ||
+        (bytes == 4 && cp < 0x10000)) {
+        return REPLACEMENT_CHARACTER;
+    }
+
+    // Surrogate check
+    if (cp >= 0xD800 && cp <= 0xDFFF) {
+        return REPLACEMENT_CHARACTER;
+    }
+
+    // Max scalar check
+    if (cp > 0x10FFFF) {
+        return REPLACEMENT_CHARACTER;
+    }
+    return cp;
+}
+
+struct utf8_decoder
 {
     template<class Iterator>
     decode_result<Iterator> decode(Iterator current, Iterator end) const
     {
-        //TODO
-        return { 0; end; }
+        if (current == end) return {0, end};
+
+        // C++17 helper to get a raw pointer from contiguous iterators
+        // (Works for const char*, const uint8_t*, std::string_view::iterator, etc.)
+        auto get_ptr = [](auto it) -> const lUInt8* {
+            if constexpr (std::is_pointer_v<decltype(it)>) {
+                return reinterpret_cast<const lUInt8*>(it);
+            } else {
+                return reinterpret_cast<const lUInt8*>(&*it);
+            }
+        };
+
+        const lUInt8* src_ptr = get_ptr(current);
+        const lUInt8* end_ptr = get_ptr(end);
+
+        // Call the raw pointer decoder
+        lChar32 cp = utf8_decode_next(src_ptr, end_ptr);
+
+        // Calculate how many bytes were consumed to advance the generic iterator
+        auto bytes_consumed = src_ptr - get_ptr(current);
+
+        Iterator next_it = current;
+        std::advance(next_it, bytes_consumed);
+
+        return { cp, next_it };
     }
 };
 
-struct utf8_encoder {
-    static constexpr size_t codePointSize(lChar32 cp) noexcept {
+struct utf8_encoder
+{
+    static constexpr size_t codePointSize(lChar32 cp) noexcept
+    {
         if (cp < 0x80) return 1;
         if (cp < 0x800) return 2;
         if (cp < 0x10000) return 3;
@@ -58,7 +148,8 @@ struct utf8_encoder {
     }
 
     template <typename OutputIt>
-    OutputIt encode(lChar32 cp, OutputIt it) const {
+    OutputIt encode(lChar32 cp, OutputIt it) const
+    {
         if (cp < 0x80) {
             *it++ = static_cast<char>(cp);
         } else if (cp < 0x800) {
@@ -78,187 +169,127 @@ struct utf8_encoder {
     }
 };
 
+struct utf16_decoder
+{
+    template<class Iterator>
+    decode_result<Iterator> decode(Iterator current, Iterator end) const
+    {
+        if (current == end) {
+            return { 0, current };
+        }
+
+        Iterator next = current;
+
+        const lUInt16 lead = static_cast<lUInt16>(*next);
+        ++next;
+
+        if (lead < 0xD800 || lead > 0xDFFF) {
+            // Normal BMP code point.
+            return { static_cast<lChar32>(lead), next };
+        }
+
+        if (lead <= 0xDBFF) {
+            // High surrogate.
+            if (next == end) {
+                // Truncated high surrogate.
+                return { REPLACEMENT_CHARACTER, next };
+            }
+
+            const lUInt16 trail = static_cast<lUInt16>(*next);
+
+            if (trail >= 0xDC00 && trail <= 0xDFFF) {
+                ++next;
+
+                const lChar32 cp =
+                    static_cast<lChar32>(0x10000)
+                    + (static_cast<lChar32>(lead - 0xD800) << 10)
+                    + static_cast<lChar32>(trail - 0xDC00);
+
+                return { cp, next };
+            }
+
+            // Invalid trail surrogate.
+            //
+            // Important: do not consume it.
+            // It will be processed as the start of the next subsequence.
+            return { REPLACEMENT_CHARACTER, next };
+        }
+
+        // Isolated low surrogate.
+        return { REPLACEMENT_CHARACTER, next };
+    }
+};
+
+struct utf16_encoder
+{
+    static constexpr std::size_t codePointSize(lChar32 cp) noexcept
+    {
+        if (!is_unicode_scalar(cp)) {
+            return 1; // replacement character
+        }
+
+        return cp < static_cast<lChar32>(0x10000) ? 1 : 2;
+    }
+
+    template<class OutputIt>
+    OutputIt encode(lChar32 cp, OutputIt it) const
+    {
+        if (!is_unicode_scalar(cp)) {
+            cp = REPLACEMENT_CHARACTER;
+        }
+
+        if (cp < static_cast<lChar32>(0x10000)) {
+            *it++ = static_cast<lUInt16>(cp);
+            return it;
+        }
+
+        const lChar32 v = cp - static_cast<lChar32>(0x10000);
+
+        *it++ = static_cast<lUInt16>(0xD800 + (v >> 10));
+        *it++ = static_cast<lUInt16>(0xDC00 + (v & 0x3FF));
+
+        return it;
+    }
+};
+
 struct utf32_decoder
 {
-    template <class Iterator>
-    decode_result<Iterator> decode(Iterator current, Iterator end) const {
-        if (current == end) return { 0, end };
-        Iterator next_it = current;
-        lChar32 cp = *next_it++;
-        return { cp, next_it };
-    }
-};
-
-template<class Decoder, class CodeUnitIterator>
-class code_point_iterator {
-public:
-    using iterator_category = std::input_iterator_tag;
-    using value_type = lChar32;
-    using difference_type = std::ptrdiff_t;
-    using pointer = const lChar32*;
-    using reference = const lChar32&;
-
-    code_point_iterator() = default; // Default constructs the "end" sentinel
-    
-    code_point_iterator(CodeUnitIterator current, CodeUnitIterator end, Decoder decoder = {})
-        : m_current(current), m_end(end), m_decoder(decoder)
+    template<class Iterator>
+    decode_result<Iterator> decode(Iterator current, Iterator end) const
     {
-        advance(); // Decode the first character immediately upon creation
-    }
-
-    reference operator*() const { return m_code_point; }
-    pointer operator->() const { return &m_code_point; }
-
-    code_point_iterator& operator++()
-    {
-        m_current = m_next; // Jump to the next byte sequence
-        advance();
-        return *this;
-    }
-
-    code_point_iterator operator++(int)
-    {
-        auto tmp = *this;
-        ++(*this);
-        return tmp;
-    }
-
-    bool operator==(const code_point_iterator& other) const
-    {
-        // Comparing against a default-constructed iterator (the sentinel) works here
-        return m_current == other.m_current; 
-    }
-
-    bool operator!=(const code_point_iterator& other) const {
-        return !(*this == other);
-    }
-
-private:
-    void advance()
-    {
-        if (m_current != m_end) {
-            auto res = m_decoder.decode(m_current, m_end);
-            m_code_point = res.code_point;
-            m_next = res.next;
-        } else {
-            // Reached the end; become the default-constructed sentinel
-            m_current = CodeUnitIterator{}; 
+        if (current == end) {
+            return { 0, current };
         }
-    }
 
-    CodeUnitIterator m_current{};
-    CodeUnitIterator m_end{};
-    CodeUnitIterator m_next{};
-    Decoder m_decoder{};
-    lChar32 m_code_point = 0;
-};
+        Iterator next = current;
 
-template<class BaseIt, class Transform>
-class code_point_transform_iterator {
-public:
-    using base_value_type = typename std::iterator_traits<BaseIt>::value_type;
-    
-    // C++17: Deduce the return type of the transform function
-    using value_type = std::invoke_result_t<Transform, base_value_type>;
-    using iterator_category = std::input_iterator_tag;
-    using difference_type = std::ptrdiff_t;
-    using pointer = const value_type*;
-    using reference = const value_type&;
+        const lUInt32 unit = static_cast<lUInt32>(*next);
+        ++next;
 
-    code_point_transform_iterator(BaseIt base, Transform transform)
-        : m_base(base), m_transform(std::move(transform)), m_dirty(true) {}
-
-    reference operator*() const
-    { 
-        update(); 
-        return m_cached; 
-    }
-
-    code_point_transform_iterator& operator++()
-    {
-        ++m_base;
-        m_dirty = true;
-        return *this; 
-    }
-
-    code_point_transform_iterator operator++(int)
-    {
-        auto tmp = *this;
-        ++(*this);
-        return tmp;
-    }
-
-    bool operator==(const code_point_transform_iterator& other) const { return m_base == other.m_base; }
-    bool operator!=(const code_point_transform_iterator& other) const { return m_base != other.m_base; }
-
-private:
-    void update() const
-    {
-        if (m_dirty) { 
-            // C++17: std::invoke handles lambdas, member functions, and functors uniformly
-            //m_cached = std::invoke(m_transform, *m_base);
-            m_cached = m_transform(*m_base);
-            m_dirty = false; 
+        if (unit <= 0x10FFFF && !(unit >= 0xD800 && unit <= 0xDFFF)) {
+            return { static_cast<lChar32>(unit), next };
         }
-    }
 
-    BaseIt m_base;
-    Transform m_transform;
-    mutable bool m_dirty = true;
-    mutable value_type m_cached{};
+        return { REPLACEMENT_CHARACTER, next };
+    }
 };
 
-
-template <class Decoder, class CodeUnitIterator>
-class code_point_view
+struct utf32_encoder
 {
-public:
-    using iterator = code_point_iterator<Decoder, CodeUnitIterator>;
-
-    code_point_view(CodeUnitIterator current, CodeUnitIterator end, Decoder decoder = {})
-        : begin_(current), end_(end), decoder_(decoder) {}
-
-    iterator begin() const {
-        return iterator(begin_, end_, decoder_);
+    static constexpr std::size_t codePointSize(lChar32) noexcept
+    {
+        return 1;
     }
 
-    iterator end() const {
-        return iterator(end_, end_, decoder_);
-    }
+    template<class OutputIt>
+    OutputIt encode(lChar32 cp, OutputIt it) const
+    {
+        if (!is_unicode_scalar(cp)) {
+            cp = REPLACEMENT_CHARACTER;
+        }
 
-private:
-    CodeUnitIterator begin_;
-    CodeUnitIterator end_;
-    Decoder          decoder_;
+        *it++ = static_cast<lUInt32>(cp);
+        return it;
+    }
 };
-
-
-template <typename SrcDecoder, typename DstEncoder, typename SrcIt>
-size_t measureCodeUnitsCount(SrcIt first, SrcIt last)
-{
-    size_t total = 0;
-    auto it = code_point_iterator<SrcDecoder, SrcIt>(first, last);
-    auto end = code_point_iterator<SrcDecoder, SrcIt>();
-    while (it != end) {
-        total += DstEncoder::codePointSize(*it);
-        ++it;
-    }
-    return total;
-}
-
-template <typename SrcDecoder, typename DstEncoder, typename SrcIt, typename DstContainer>
-void reencode(SrcIt first, SrcIt last, DstContainer& dst)
-{
-    size_t required = measureCodeUnitsCount<SrcDecoder, DstEncoder>(first, last);
-    
-    dst.reserve(dst.size() + required);
-    
-    DstEncoder encoder;
-    auto out = std::back_inserter(dst);
-    
-    auto view = code_point_view<SrcDecoder, SrcIt>(first, last, SrcDecoder{});
-    for (auto it = view.begin(); it != view.end(); ++it) {
-        out = encoder.encode(*it, out);
-    }
-}
 #endif /* __LV_UTF_H_INCLUDED__ */

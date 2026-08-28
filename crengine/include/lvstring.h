@@ -34,6 +34,7 @@
 
 #include "lvtypes.h"
 #include "lvmemman.h"
+#include "unicode_code_point.h"
 
 #if (USE_UTF8PROC==1)
 #include <utf8proc.h>
@@ -133,16 +134,8 @@ int    lStr_cmp(const lChar8 * str1, const lChar32 * str2);
 int    lStr_cmp(const lChar32 * str1, const lChar16 * str2);
 /// strcmp for lChar8
 int    lStr_cmp(const lChar8 * str1, const lChar8 * str2);
-/// convert string to uppercase
-void lStr_uppercase( lChar8 * str, int len );
-/// convert string to lowercase
-void lStr_lowercase( lChar8 * str, int len );
-/// convert string to uppercase
-void lStr_uppercase( lChar32 * str, int len );
 /// convert string to lowercase
 void lStr_lowercase( lChar32 * str, int len );
-/// convert string to be capitalized
-void lStr_capitalize( lChar32 * str, int len );
 /// convert string to use full width chars
 void lStr_fullWidthChars( lChar32 * str, int len );
 /// calculates CRC32 for buffer contents
@@ -353,6 +346,22 @@ inline lUInt32 getHash(const StringT& s)
 
 int TrimDoubleSpaces(lChar32 * buf, int len,  bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens);
 
+lChar32 to_upper(lChar32 cp);
+lChar32 to_lower(lChar32 cp);
+
+struct capitalize_transform
+{
+    bool prev_is_word_sep = true;
+    lChar32 operator()(lChar32 cp)
+    {
+        if (prev_is_word_sep) {
+            cp = to_upper(cp);
+        }
+        prev_is_word_sep = lStr_isWordSeparator(cp);
+        return cp;
+    }
+};
+
 template <typename CharT>
 class basic_lstring : public std::basic_string<CharT>
 {
@@ -433,6 +442,46 @@ public:
         auto converted = detail::Transcoder<CharT, lChar32>::run(str, count);
         base::assign(std::move(converted));
     }
+
+    auto code_points() const
+    {
+        if constexpr (std::is_same_v<CharT, lChar8>) {
+            return code_point_view<utf8_decoder, typename base::const_iterator>(
+                this->begin(), this->end()
+            );
+        }
+        else if constexpr (std::is_same_v<CharT, lChar16>) {
+            return code_point_view<utf16_decoder, typename base::const_iterator>(
+                this->begin(), this->end()
+            );
+        }
+        else if constexpr (std::is_same_v<CharT, lChar32>) {
+            return code_point_view<utf32_decoder, typename base::const_iterator>(
+                this->begin(), this->end()
+            );
+        }
+    }
+
+    template <typename View>
+    void assign(const View& view)
+    {
+        if constexpr (std::is_same_v<CharT, lChar8>) {
+            basic_lstring<lChar8> converted;
+            reencodeView<utf8_encoder>(view, converted);
+            base::assign(std::move(converted));
+        }
+        else if constexpr (std::is_same_v<CharT, lChar16>) {
+            basic_lstring<lChar16> converted;
+            reencodeView<utf16_encoder>(view, converted);
+            base::assign(std::move(converted));
+        }
+        else if constexpr (std::is_same_v<CharT, lChar32>) {
+            basic_lstring<lChar32> converted;
+            reencodeView<utf32_encoder>(view, converted);
+            base::assign(std::move(converted));
+        }
+    }
+
     lUInt32 getHash() const
     {
         return ::getHash(*this);
@@ -539,20 +588,23 @@ public:
 
     basic_lstring& uppercase()
     {
-        //TODO
+        auto tmp = this->code_points() | transformed(to_upper);
+        assign(tmp);
         return *this;
     }
 
     /// make string lowercase
     basic_lstring& lowercase()
     {
-        //TODO
+        auto tmp = this->code_points() | transformed(to_lower);
+        assign(tmp);
         return *this;
     }
 
     basic_lstring& capitalize()
     {
-        //TODO
+        auto tmp = this->code_points() | transformed(capitalize_transform{});
+        assign(tmp);
         return *this;
     }
 
@@ -583,7 +635,7 @@ public:
     basic_lstring& trimNonAlpha()
     {
         size_t start;
-        for (start = 0; start < this->size() && !isAlNum(*this[start]); ++start) 
+        for (start = 0; start < this->size() && !isAlNum(*this[start]); ++start)
             ;
 
         if (start >= this->size()) {

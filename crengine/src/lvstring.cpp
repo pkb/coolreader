@@ -576,88 +576,6 @@ bool lvUnicodeIsAlpha( lChar32 ch )
     return false;
 }
 
-void lStr_uppercase( lChar8 * str, int len )
-{
-    for ( int i=0; i<len; i++ ) {
-        lChar32 ch = str[i];
-        if ( ch>='a' && ch<='z' ) {
-            str[i] = ch - 0x20;
-        } else if ( ch>=0xE0 && ch<=0xFF ) {
-            str[i] = ch - 0x20;
-        }
-    }
-}
-
-void lStr_lowercase( lChar8 * str, int len )
-{
-    for ( int i=0; i<len; i++ ) {
-        lChar32 ch = str[i];
-        if ( ch>='A' && ch<='Z' ) {
-            str[i] = ch + 0x20;
-        } else if ( ch>=0xC0 && ch<=0xDF ) {
-            str[i] = ch + 0x20;
-        }
-    }
-}
-
-void lStr_uppercase( lChar32 * str, int len )
-{
-    for ( int i=0; i<len; i++ ) {
-        lChar32 ch = str[i];
-#if (USE_UTF8PROC==1)
-        str[i] = utf8proc_toupper(ch);
-#else
-        if ( ch>='a' && ch<='z' ) {
-            str[i] = ch - 0x20;
-        } else if ( ch>=0xE0 && ch<=0xFF ) {
-            str[i] = ch - 0x20;
-        } else if ( ch>=0x430 && ch<=0x44F ) {
-            str[i] = ch - 0x20;
-        } else if ( ch>=0x3b0 && ch<=0x3cF ) {
-            str[i] = ch - 0x20;
-        } else if ( (ch >> 8)==0x1F ) { // greek
-            lChar32 n = ch & 255;
-            if (n<0x70) {
-                str[i] = ch | 8;
-            } else if (n<0x80) {
-
-            } else if (n<0xF0) {
-                str[i] = ch | 8;
-            }
-        }
-#endif
-    }
-}
-
-void lStr_lowercase( lChar32 * str, int len )
-{
-    for ( int i=0; i<len; i++ ) {
-        lChar32 ch = str[i];
-#if (USE_UTF8PROC==1)
-        str[i] = utf8proc_tolower(ch);
-#else
-        if ( ch>='A' && ch<='Z' ) {
-            str[i] = ch + 0x20;
-        } else if ( ch>=0xC0 && ch<=0xDF ) {
-            str[i] = ch + 0x20;
-        } else if ( ch>=0x410 && ch<=0x42F ) {
-            str[i] = ch + 0x20;
-        } else if ( ch>=0x390 && ch<=0x3aF ) {
-            str[i] = ch + 0x20;
-        } else if ( (ch >> 8)==0x1F ) { // greek
-            lChar32 n = ch & 255;
-            if (n<0x70) {
-                str[i] = ch & (~8);
-            } else if (n<0x80) {
-
-            } else if (n<0xF0) {
-                str[i] = ch & (~8);
-            }
-        }
-#endif
-    }
-}
-
 void lStr_fullWidthChars( lChar32 * str, int len )
 {
     for ( int i=0; i<len; i++ ) {
@@ -671,41 +589,66 @@ void lStr_fullWidthChars( lChar32 * str, int len )
     }
 }
 
-void lStr_capitalize( lChar32 * str, int len )
+lChar32 to_upper(lChar32 cp)
 {
-    bool prev_is_word_sep = true; // first char of string will be capitalized
-    for ( int i=0; i<len; i++ ) {
-        lChar32 ch = str[i];
-        if (prev_is_word_sep) {
-            // as done as in lStr_uppercase()
 #if (USE_UTF8PROC==1)
-            str[i] = utf8proc_toupper(ch);
+        return utf8proc_toupper(cp);
 #else
-            if ( ch>='a' && ch<='z' ) {
-                str[i] = ch - 0x20;
-            } else if ( ch>=0xE0 && ch<=0xFF ) {
-                str[i] = ch - 0x20;
-            } else if ( ch>=0x430 && ch<=0x44F ) {
-                str[i] = ch - 0x20;
-            } else if ( ch>=0x3b0 && ch<=0x3cF ) {
-                str[i] = ch - 0x20;
-            } else if ( (ch >> 8)==0x1F ) { // greek
-                lChar32 n = ch & 255;
-                if (n<0x70) {
-                    str[i] = ch | 8;
-                } else if (n<0x80) {
+        if (cp >= 'a' && cp <= 'z') {
+            return cp - 0x20;
+        } else if (cp >= 0xE0 && cp <=0xFF) {
+            return cp - 0x20;
+        } else if (cp >= 0x430 && cp <= 0x44F) {
+            return cp - 0x20;
+        } else if (cp >=0x3b0 && cp <=0x3cF) {
+            return cp - 0x20;
+        } else if ((cp >> 8) == 0x1F ) { // greek
+            lChar32 n = cp & 255;
+            if (n < 0x70) {
+                return cp | 8;
+            } else if (n<0x80) {
 
-                } else if (n<0xF0) {
-                    str[i] = ch | 8;
-                }
+            } else if (n<0xF0) {
+                return cp | 8;
             }
-#endif
         }
-        // update prev_is_word_sep for next char
-        prev_is_word_sep = lStr_isWordSeparator(ch);
-    }
+        return cp;
+#endif
 }
 
+lChar32 to_lower(lChar32 cp)
+{
+#if (USE_UTF8PROC==1)
+        return utf8proc_tolower(cp);
+#else
+        if (cp >='A' && cp <='Z') {
+            return cp + 0x20;
+        } else if ( cp>=0xC0 && cp<=0xDF ) {
+            return cp + 0x20;
+        } else if (cp >=0x410 && cp <=0x42F) {
+            return cp + 0x20;
+        } else if (cp >= 0x390 && cp <= 0x3aF) {
+            return cp + 0x20;
+        } else if ( (cp >> 8)==0x1F ) { // greek
+            lChar32 n = cp & 255;
+            if (n<0x70) {
+                return cp & (~8);
+            } else if (n<0x80) {
+
+            } else if (n<0xF0) {
+                return cp & (~8);
+            }
+        }
+        return cp;
+#endif
+}
+
+void lStr_lowercase( lChar32 * str, int len )
+{
+    for ( int i=0; i<len; i++ ) {
+        str[i] = to_lower(str[i]);
+    }
+}
 
 int TrimDoubleSpaces(lChar32 * buf, int len,  bool allowStartSpace, bool allowEndSpace, bool removeEolHyphens)
 {

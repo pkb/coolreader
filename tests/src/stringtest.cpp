@@ -73,6 +73,21 @@ TEST_CASE_TEMPLATE("trim tests", T, lString32, lString16, lString8) {
         str4.trim();
         CHECK(toStdString(str4) == "aaa a aaaa");
     }
+
+    SUBCASE("uppercase test") {
+        T str("hello world");
+        CHECK(toStdString(str.uppercase()) == "HELLO WORLD");
+    }
+
+    SUBCASE("lowercase test") {
+        T str("HELLO WORLD");
+        CHECK(toStdString(str.lowercase()) == "hello world");
+    }
+
+    SUBCASE("capitalize test") {
+        T str("hello world It is crengine test");
+        CHECK(toStdString(str.capitalize()) == "Hello World It Is Crengine Test");
+    }
 }
 
 #if 0
