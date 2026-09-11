@@ -45,6 +45,7 @@ constexpr bool is_unicode_scalar(lChar32 cp) noexcept
         && !(u >= 0xD800 && u <= 0xDFFF);
 }
 
+template <bool allow_surrogate = false, bool allow_overlong_null = false>
 static lChar32 utf8_decode_next(const lUInt8*& src, const lUInt8* end)
 {
     if (src >= end) return 0;
@@ -85,26 +86,37 @@ static lChar32 utf8_decode_next(const lUInt8*& src, const lUInt8* end)
     }
 
     // --- Validation ---
-    // Overlong check
-    if ((bytes == 2 && cp < 0x80) ||
-        (bytes == 3 && cp < 0x800) ||
-        (bytes == 4 && cp < 0x10000)) {
-        return REPLACEMENT_CHARACTER;
+    bool valid = true;
+
+    // 1. Range check
+    if (cp > 0x10FFFF) valid = false;
+
+    // 2. Overlong check
+    if (valid) {
+        bool overlong = (bytes == 2 && cp < 0x80) ||
+                        (bytes == 3 && cp < 0x800) ||
+                        (bytes == 4 && cp < 0x10000);
+        if (overlong) {
+            // Allow only the overlong null if the policy says so
+            if (!(cp == 0 && bytes == 2 && allow_overlong_null))
+                valid = false;
+        }
     }
 
-    // Surrogate check
-    if (cp >= 0xD800 && cp <= 0xDFFF) {
-        return REPLACEMENT_CHARACTER;
+    // 3. Surrogate check
+    if (valid) {
+        if (cp >= 0xD800 && cp <= 0xDFFF && !allow_surrogate)
+            valid = false;
     }
 
-    // Max scalar check
-    if (cp > 0x10FFFF) {
+    if (!valid)
         return REPLACEMENT_CHARACTER;
-    }
+
     return cp;
 }
 
-struct utf8_decoder
+template <bool allow_surrogate = false, bool allow_overlong_null = false, bool compose_surrogate_pairs = false>
+struct utf8_decoder_t
 {
     template<class Iterator>
     decode_result<Iterator> decode(Iterator current, Iterator end) const
@@ -125,8 +137,20 @@ struct utf8_decoder
         const lUInt8* end_ptr = get_ptr(end);
 
         // Call the raw pointer decoder
-        lChar32 cp = utf8_decode_next(src_ptr, end_ptr);
-
+        lChar32 cp = utf8_decode_next<allow_surrogate, allow_overlong_null>(src_ptr, end_ptr);
+        if constexpr (compose_surrogate_pairs) {
+            if (cp >= 0xD800 && cp <= 0xDBFF) { // high surrogate
+                const lUInt8* saved = src_ptr;
+                lChar32 low = utf8_decode_next<allow_surrogate, allow_overlong_null>(src_ptr, end_ptr);
+                if (low >= 0xDC00 && low <= 0xDFFF) {
+                    // combine
+                    cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                } else {
+                    // not a low surrogate, rewind
+                    src_ptr = saved;
+                }
+            }
+        }
         // Calculate how many bytes were consumed to advance the generic iterator
         auto bytes_consumed = src_ptr - get_ptr(current);
 
@@ -137,37 +161,88 @@ struct utf8_decoder
     }
 };
 
-struct utf8_encoder
+template <bool encode_null_as_overlong = false, bool split_supplementary_into_surrogates = false, bool allow_unpaired_surrogates = false>
+struct utf8_encoder_t
 {
     static constexpr size_t codePointSize(lChar32 cp) noexcept
     {
-        if (cp < 0x80) return 1;
-        if (cp < 0x800) return 2;
-        if (cp < 0x10000) return 3;
+        if (cp == 0 && encode_null_as_overlong)
+            return 2;
+        if (cp < 0x80)
+            return 1;
+        if (cp < 0x800)
+            return 2;
+        if (cp < 0x10000)
+            return 3;
+        if (split_supplementary_into_surrogates)
+            return 6;
         return 4;
     }
 
     template <typename OutputIt>
     OutputIt encode(lChar32 cp, OutputIt it) const
     {
+        // Basic validation for out-of-range code points
+        if (cp > 0x10FFFF) {
+            cp = REPLACEMENT_CHARACTER;
+        }
+
+        // If strict UTF-8 is requested, replace unpaired surrogates with U+FFFD
+        if (!allow_unpaired_surrogates && !split_supplementary_into_surrogates) {
+            if (cp >= 0xD800 && cp <= 0xDFFF) {
+                cp = REPLACEMENT_CHARACTER;
+            }
+        }
+
         if (cp < 0x80) {
-            *it++ = static_cast<char>(cp);
+            if (cp == 0 && encode_null_as_overlong) {
+                *it++ = 0xC0;
+                *it++ = 0x80;
+            } else {
+                *it++ = static_cast<char>(cp);
+            }
         } else if (cp < 0x800) {
             *it++ = static_cast<char>(0xC0 | (cp >> 6));
             *it++ = static_cast<char>(0x80 | (cp & 0x3F));
         } else if (cp < 0x10000) {
-            *it++ = static_cast<char>(0xE0 | (cp >> 12));
-            *it++ = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-            *it++ = static_cast<char>(0x80 | (cp & 0x3F));
+            it = encode_3byte_sequence(cp, it);
         } else {
-            *it++ = static_cast<char>(0xF0 | (cp >> 18));
-            *it++ = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-            *it++ = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-            *it++ = static_cast<char>(0x80 | (cp & 0x3F));
+            if constexpr (split_supplementary_into_surrogates) {
+                lChar32 reduced = cp - 0x10000;
+                lChar32 high_surrogate = 0xD800 | ((reduced >> 10) & 0x3FF);
+                lChar32 low_surrogate  = 0xDC00 | (reduced & 0x3FF);
+
+                // Encode each surrogate as a 3-byte UTF-8 sequence
+                it = encode_3byte_sequence(high_surrogate, it);
+                it = encode_3byte_sequence(low_surrogate, it);
+            } else {
+                *it++ = static_cast<char>(0xF0 | (cp >> 18));
+                *it++ = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+                *it++ = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                *it++ = static_cast<char>(0x80 | (cp & 0x3F));
+            }
         }
         return it;
     }
+    template <typename OutputIt>
+    inline OutputIt encode_3byte_sequence(lChar32 cp, OutputIt it) const
+    {
+        *it++ = static_cast<char>(0xE0 | (cp >> 12));
+        *it++ = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        *it++ = static_cast<char>(0x80 | (cp & 0x3F));
+        return it;
+    }
 };
+
+using utf8_encoder = utf8_encoder_t<>;
+using utf8_decoder = utf8_decoder_t<>;
+using wtf8_encoder = utf8_encoder_t<false, false, true>;
+using wtf8_decoder = utf8_decoder_t<true, false, false>;
+using mtf8_encoder = utf8_encoder_t<true, true, false>;
+using mtf8_decoder = utf8_decoder_t<true, true, true>;
+using cesu8_encoder = utf8_encoder_t<false, true, true>;
+using cesu8_decoder = utf8_decoder_t<true, false, true>;
+
 
 struct utf16_decoder
 {
